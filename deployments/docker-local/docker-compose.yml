@@ -1,4 +1,21 @@
 services:
+  frontend:
+    build:
+      context: ../../src/frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../../src/frontend:/app
+      - /app/node_modules
+    environment:
+      - REACT_APP_API_URL=http://localhost:5001
+    stdin_open: true
+    tty: true
+    depends_on:
+      - backend
+    networks:
+      - COB-service
+
   backend:
     build:
       context: ../../src/backend
