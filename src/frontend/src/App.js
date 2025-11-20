@@ -10,7 +10,7 @@ function App() {
     <Router>
       <div className="app-container">
         <nav className="navbar">
-          <h1>Gestionale Compiti</h1>
+          <h1>Assignments platform</h1>
         </nav>
         <div className="content">
           <Routes>
