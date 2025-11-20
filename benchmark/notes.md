@@ -18,3 +18,11 @@ Data Persistence    --> Volume consistency
 ### test_rolling_update.py
 
 ### test_persistence.py
+
+
+
+
+# Command
+py -3.13 -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
