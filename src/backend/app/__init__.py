@@ -1,4 +1,5 @@
 import os
+import socket
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 from .services import mongodb
@@ -26,9 +27,12 @@ def create_app():
     def base_endpoint():
         """Base endpoint for testing purposes (DB connection)) ."""
         db_status = mongodb.check_db_connection()
+        container_id =socket.gethostname()
+
         return {
             "message": "Flask server is alive.",
-            "database_status": db_status
+            "database_status": db_status,
+            "container_id": container_id
         }
 
     return app

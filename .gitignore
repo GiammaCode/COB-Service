@@ -4,6 +4,8 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+benchmark/venv
+
 # C extensions
 *.so
 
