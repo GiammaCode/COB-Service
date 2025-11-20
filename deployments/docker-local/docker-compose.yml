@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ../../src/backend
+    ports:
+      - "5001:5000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - MONGO_URI=mongodb://mongoadmin:secret@db:27017/submission_management_db?authSource=admin
+      - FLASK_APP=app.py
+      - FLASK_RUN_HOST=0.0.0.0
+      - FLASK_DEBUG=1
+    depends_on:
+      - db
+    networks:
+      - COB-service
+
+  db:
+    image: mongo:latest
+    ports:
+      - "27017:27107"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=mongoadmin
+      - MONGO_INITDB_ROOT_PASSWORD=secret
+    volumes:
+      - mongo_db:/data/db
+    networks:
+      - COB-service
+
+networks:
+  COB-service:
+    driver: bridge
+
+volumes:
+  mongo_data:
