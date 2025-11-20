@@ -1,0 +1,239 @@
+openapi: 3.0.0
+info:
+  title: Assignment Platform API
+  description: API for uploading assignments and adding submissions.
+  version: 1.0.0
+
+tags:
+  - name: Student
+    description: Endpoints for the student area
+  - name: Professor
+    description: Endpoints for the professor area
+
+paths:
+  # --- STUDENT & SHARED ENDPOINTS ---
+  /assignments:
+    get:
+      tags:
+        - Student
+      summary: List all assignments
+      description: Return the list of all available assignments.
+      responses:
+        '200':
+          description: A list of assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Assignment'
+    post:
+      tags:
+        - Professor
+      summary: Create assignment
+      description: Allows a professor to create a new assignment.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewAssignment'
+      responses:
+        '201':
+          description: Assignment created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assignment'
+
+  /assignments/{assignmentId}:
+    get:
+      tags:
+        - Student
+      summary: Get assignment details
+      description: Returns the details of a single specific assignment.
+      parameters:
+        - name: assignmentId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The ID (ObjectId) of the assignment.
+      responses:
+        '200':
+          description: Assignment details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assignment'
+        '404':
+          description: Assignment not found.
+
+  /assignments/{assignmentId}/submit:
+    post:
+      tags:
+        - Student
+      summary: Submit homework
+      description: Allows a student to submit homework for a specific assignment.
+      parameters:
+        - name: assignmentId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The ID (ObjectId) of the assignment being submitted to.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmissionPayload'
+      responses:
+        '201':
+          description: Submission successful.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Submission'
+
+  # --- PROFESSOR ENDPOINTS ---
+  /submissions:
+    get:
+      tags:
+        - Professor
+      summary: List all submissions
+      description: Returns a list of all submissions received for all assignments.
+      responses:
+        '200':
+          description: A list of submissions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Submission'
+
+  /submissions/{idSubmission}:
+    get:
+      tags:
+        - Professor
+      summary: Get submission details
+      description: Returns the details of a single specific submission.
+      parameters:
+        - name: idSubmission
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The ID (ObjectId) of the submission.
+      responses:
+        '200':
+          description: Submission details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Submission'
+        '404':
+          description: Submission not found.
+
+components:
+  schemas:
+    # Schema completo dell'Assignment (dal DB)
+    Assignment:
+      type: object
+      properties:
+        _id:
+          type: string
+          description: ObjectId
+          readOnly: true
+        title:
+          type: string
+          example: "Final Flask Project"
+        description:
+          type: string
+          example: "Develop a complete web app..."
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        due_date:
+          type: string
+          format: date-time
+          example: "2025-11-15T23:59:59Z"
+      required:
+        - _id
+        - title
+        - description
+        - created_at
+        - due_date
+
+    # Payload per creare un nuovo Assignment
+    NewAssignment:
+      type: object
+      properties:
+        title:
+          type: string
+          example: "Final Flask Project"
+        description:
+          type: string
+          example: "Develop a complete web app..."
+        due_date:
+          type: string
+          format: date-time
+          example: "2025-11-15T23:59:59Z"
+      required:
+        - title
+        - description
+        - due_date
+
+    # Schema completo della Submission (dal DB)
+    Submission:
+      type: object
+      properties:
+        idSubmission:
+          type: string
+          description: ObjectId della submission
+        idAssignment:
+          type: string
+          description: Assignment ObjectId
+        student_name:
+          type: string
+          example: "John Doe"
+        submitted_at:
+          type: string
+          format: date-time
+        result:
+          type: string
+          example: "https://github.com/johndoe/project"
+      required:
+        - idSubmission
+        - idAssignment
+        - student_name
+        - submitted_at
+        - result
+
+    # Payload inviato dallo studente
+    SubmissionPayload:
+      type: object
+      properties:
+        idSubmission:
+          type: string
+          description: "Optional if generated by server, required if client-generated"
+          example: "507f1f77bcf86cd799439011"
+        idAssignment:
+          type: string
+          example: "507f191e810c19729de860ea"
+        student_name:
+          type: string
+          example: "John Doe"
+        submitted_at:
+          type: string
+          format: date-time
+          example: "2025-11-16T10:00:00Z"
+        result:
+          type: string
+          example: "https://github.com/johndoe/project"
+      required:
+        - idAssignment
+        - student_name
+        - result
