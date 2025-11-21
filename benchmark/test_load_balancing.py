@@ -1,5 +1,3 @@
-from turtledemo.penrose import start
-
 import requests
 import concurrent.futures
 from collections import Counter
@@ -11,12 +9,12 @@ CONCURRENT_WORKERS = 10
 
 def send_request(request_id):
     """Send a request and return the ID container 
-    that replies it"""
+    that replies to it"""
     try:
         response = requests.get(URL, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            # Recupera l'ID aggiunto nella modifica precedente
+            # Retrieve the container ID from the response
             return data.get('container_id', 'Unknown')
         else:
             return f"Error {response.status_code}"
