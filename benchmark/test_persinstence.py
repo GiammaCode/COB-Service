@@ -2,87 +2,96 @@ import requests
 import subprocess
 import time
 import json
+import sys
 
 BASE_URL = "http://localhost:5001"
 ASSIGNMENT_URL = f"{BASE_URL}/assignments"
 STACK_NAME = "cob-service"
 
 
-def get_db_service_name():
-    """Get the database service name in Docker Swarm"""
-    return f"{STACK_NAME}_db"
+def log(message):
+    print(message, file=sys.stderr)
 
 
 def get_db_container_id():
-    """Get the container ID of the database service"""
-    cmd = f"docker ps --filter name={get_db_service_name()} --format {{{{.ID}}}}"
+    cmd = f"docker ps --filter name={STACK_NAME}_db --format {{{{.ID}}}}"
     try:
         output = subprocess.check_output(cmd, shell=True).decode().strip()
         return output.split('\n')[0] if output else None
-    except Exception as e:
-        print(f"Error getting container ID: {e}")
+    except Exception:
         return None
 
 
-
 def run_persistence_test():
-    print("Starting persistence test")
+    log("Starting persistence test...")
+
     payload = {
-        "title": "Persistence Test Assignment",
-        "description": "Data must survive container death",
+        "title": "Persistence Test Data",
+        "description": "Data survival test",
         "due_date": "2025-12-31T23:59:59Z"
     }
+
+    result = {
+        "test_name": "data_persistence",
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "status": "failed",  # default
+        "metrics": {}
+    }
+
+    # 1. Create Data
     try:
         resp = requests.post(ASSIGNMENT_URL, json=payload)
         if resp.status_code != 201:
-            print(resp.status_code)
+            result["error"] = f"API Error {resp.status_code}"
+            print(json.dumps(result))
             return
-
-        data = resp.json()
-        assignment_id = data.get('_id')
-        print(f"Assignment ID: {assignment_id}")
-
+        assignment_id = resp.json().get('_id')
     except Exception as e:
-        print(f"Error {e}")
+        result["error"] = str(e)
+        print(json.dumps(result))
         return
 
+    # 2. Kill DB
     db_container = get_db_container_id()
-    if not db_container:
-        print("No DB container found")
-        return
-
-    #Killing db
-    subprocess.run(f"docker kill {db_container}", shell=True)
-    time.sleep(2)
-
-    max_wait = 60
-    start_time = time.time()
-
-    while time.time() < start_time + max_wait:
-        new_container = get_db_container_id()
-        if new_container and new_container != db_container:
-            print(f"New database container started: {new_container}")
-            break
-        time.sleep(2)
+    if db_container:
+        log(f"Killing DB container: {db_container}")
+        subprocess.run(f"docker kill {db_container}", shell=True, stdout=subprocess.DEVNULL)
     else:
-        print("Database did not restart in time")
+        result["error"] = "DB container not found"
+        print(json.dumps(result))
         return
 
-    time.sleep(10)
+    # 3. Wait for restart
+    log("Waiting for DB restart...")
+    time.sleep(2)  # Initial pause
+    restarted = False
+    for _ in range(30):
+        new_id = get_db_container_id()
+        if new_id and new_id != db_container:
+            restarted = True
+            break
+        time.sleep(1)
 
+    if not restarted:
+        result["error"] = "DB did not restart"
+        print(json.dumps(result))
+        return
+
+    # 4. Verify Data
+    time.sleep(5)  # Wait for Mongo internal startup
     try:
         check_resp = requests.get(f"{ASSIGNMENT_URL}/{assignment_id}")
-
         if check_resp.status_code == 200:
-            print("SUCCESS: Data persisted after container destruction!")
-            print(f"   Retrieved data: {check_resp.json()['title']}")
-        elif check_resp.status_code == 404:
-            print("FAILURE: Assignment no longer exists. Volume did not work.")
+            result["status"] = "passed"
+            result["metrics"]["data_retrieved"] = True
+            log("Success: Data survived.")
         else:
-            print(f"Unexpected error: {check_resp.status_code}")
-
+            result["metrics"]["data_retrieved"] = False
+            result["error"] = f"Data missing. HTTP {check_resp.status_code}"
     except Exception as e:
-        print(f"Verification error: {e}")
+        result["error"] = f"Verification failed: {e}"
+
+    print(json.dumps(result))
 
 
 if __name__ == "__main__":

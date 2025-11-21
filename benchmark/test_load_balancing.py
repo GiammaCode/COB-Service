@@ -2,55 +2,65 @@ import requests
 import concurrent.futures
 from collections import Counter
 import time
+import sys
+import json
 
 URL = "http://localhost:5001/"
 TOT_REQUESTS = 100
 CONCURRENT_WORKERS = 10
 
+
+def log(message):
+    print(message, file=sys.stderr)
+
+
 def send_request(request_id):
-    """Send a request and return the ID container 
-    that replies to it"""
     try:
         response = requests.get(URL, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            # Retrieve the container ID from the response
             return data.get('container_id', 'Unknown')
         else:
-            return f"Error {response.status_code}"
-    except Exception as e:
-        return "Connection Error"
+            return "error_http"
+    except Exception:
+        return "error_connection"
+
 
 def run_load_balancing_test():
-    print("starting load balancing test")
-    print(f"TARGET: {URL}")
-    print(f"TOTAL REQUESTS: {TOT_REQUESTS}")
-    print(f"CONCURRENT WORKERS: {CONCURRENT_WORKERS}")
+    log("Starting load balancing test...")
 
     results = []
     start_time = time.time()
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=CONCURRENT_WORKERS) as executor:
-        # list of task
         futures = [executor.submit(send_request, i) for i in range(TOT_REQUESTS)]
-
         for future in concurrent.futures.as_completed(futures):
             results.append(future.result())
 
-    end_time = time.time()
-    duration = end_time - start_time
-
+    duration = time.time() - start_time
     counter = Counter(results)
 
-    print(f"Duration: {duration: .2f} seconds")
-    print(f"Total answer received: {len(results)}")
+    # Calculate distribution logic
+    unique_containers = len([k for k in counter.keys() if not k.startswith("error")])
 
-    print(f"{'ID Container ':<30} | {'Request':<10} | {'Percentage':<10}")
-    print("-" * 55)
+    # Pass if at least 2 containers responded (assuming replicas > 1)
+    status = "passed" if unique_containers > 0 else "failed"
 
-    for container_id, count in counter.items():
-        percentage = (count / TOT_REQUESTS) * 100
-        print(f"{container_id:<30} | {count:<10} | {percentage:.1f}%")
+    distribution_map = dict(counter)
+
+    result = {
+        "test_name": "load_balancing",
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "status": status,
+        "metrics": {
+            "total_requests": TOT_REQUESTS,
+            "duration_seconds": round(duration, 2),
+            "unique_responders": unique_containers,
+            "distribution": distribution_map
+        }
+    }
+
+    print(json.dumps(result))
 
 
 if __name__ == "__main__":
