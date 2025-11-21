@@ -5,18 +5,28 @@ import json
 
 BASE_URL = "http://localhost:5001"
 ASSIGNMENT_URL = f"{BASE_URL}/assignments"
+STACK_NAME = "cob-service"
 
 
-def get_mongo_container():
-    cmd = "docker ps --filter name=db --format {{.ID}}"
-    return subprocess.check_output(cmd, shell=True).decode().strip()
+def get_db_service_name():
+    """Get the database service name in Docker Swarm"""
+    return f"{STACK_NAME}_db"
+
+
+def get_db_container_id():
+    """Get the container ID of the database service"""
+    cmd = f"docker ps --filter name={get_db_service_name()} --format {{{{.ID}}}}"
+    try:
+        output = subprocess.check_output(cmd, shell=True).decode().strip()
+        return output.split('\n')[0] if output else None
+    except Exception as e:
+        print(f"Error getting container ID: {e}")
+        return None
+
 
 
 def run_persistence_test():
-    print("--- Inizio Test Data Persistence ---")
-
-    # 1. Creazione Dato
-    print("📝 Creazione nuovo assignment...")
+    print("Starting persistence test")
     payload = {
         "title": "Persistence Test Assignment",
         "description": "Data must survive container death",
@@ -25,47 +35,54 @@ def run_persistence_test():
     try:
         resp = requests.post(ASSIGNMENT_URL, json=payload)
         if resp.status_code != 201:
-            print(f"❌ Errore creazione assignment: {resp.text}")
+            print(resp.status_code)
             return
 
         data = resp.json()
-        assignment_id = data.get('_id') or data.get('id')  # Gestisce ObjectId
-        print(f"✅ Assignment creato con ID: {assignment_id}")
+        assignment_id = data.get('_id')
+        print(f"Assignment ID: {assignment_id}")
 
     except Exception as e:
-        print(f"❌ Errore connessione: {e}")
+        print(f"Error {e}")
         return
 
-    # 2. Distruzione Database
-    db_container = get_mongo_container()
-    print(f"💣 KILLING Database container {db_container}...")
-    subprocess.run(f"docker rm -f {db_container}", shell=True)
+    db_container = get_db_container_id()
+    if not db_container:
+        print("No DB container found")
+        return
 
-    print("😴 Attesa (il sistema è senza DB)...")
+    #Killing db
+    subprocess.run(f"docker kill {db_container}", shell=True)
     time.sleep(2)
 
-    # 3. Ripristino Database
-    print("♻️ Ricreazione container DB (docker-compose up)...")
-    subprocess.run("docker-compose up -d db", shell=True)
+    max_wait = 60
+    start_time = time.time()
 
-    print("⏳ Attesa boot database (10s)...")
-    time.sleep(10)  # Mongo ci mette un po' a partire
+    while time.time() < start_time + max_wait:
+        new_container = get_db_container_id()
+        if new_container and new_container != db_container:
+            print(f"New database container started: {new_container}")
+            break
+        time.sleep(2)
+    else:
+        print("Database did not restart in time")
+        return
 
-    # 4. Verifica Esistenza Dati
-    print(f"🔍 Verifica esistenza assignment {assignment_id}...")
+    time.sleep(10)
+
     try:
         check_resp = requests.get(f"{ASSIGNMENT_URL}/{assignment_id}")
 
         if check_resp.status_code == 200:
-            print("✅ SUCCESS: I dati sono persistiti dopo la distruzione del container!")
-            print(f"   Dati recuperati: {check_resp.json()['title']}")
+            print("SUCCESS: Data persisted after container destruction!")
+            print(f"   Retrieved data: {check_resp.json()['title']}")
         elif check_resp.status_code == 404:
-            print("❌ FAILURE: L'assignment non esiste più. Il volume non ha funzionato.")
+            print("FAILURE: Assignment no longer exists. Volume did not work.")
         else:
-            print(f"⚠️ Errore inaspettato: {check_resp.status_code}")
+            print(f"Unexpected error: {check_resp.status_code}")
 
     except Exception as e:
-        print(f"❌ Errore verifica: {e}")
+        print(f"Verification error: {e}")
 
 
 if __name__ == "__main__":
