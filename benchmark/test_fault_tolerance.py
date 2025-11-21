@@ -4,65 +4,82 @@ import subprocess
 import sys
 
 URL = "http://localhost:5001/"
+STACK_NAME = "cob-service"
+# Specifica il nome del servizio backend come definito nello stack (solitamente stackname_servicename)
+SERVICE_FILTER = f"{STACK_NAME}_backend"
 
-def get_backend_container_id():
+
+def get_backend_container_ids():
+    """Get ONLY backend container IDs using a stricter filter"""
     try:
-        cmd =  "docker ps --filter name=backend --format {{.ID}}"
+        # CORREZIONE 1: Aggiunto filtro più specifico (name=cob-service_backend)
+        # Usa -q per quiet (solo ID) e filtra solo i running
+        cmd = f"docker ps --filter name={SERVICE_FILTER} --filter status=running --format {{{{.ID}}}}"
         output = (subprocess.check_output(cmd, shell=True)
-                  .decode().strip().split("\n")[0])
-        return output
+                  .decode().strip().split("\n"))
+        # Rimuove stringhe vuote se non ci sono container
+        return [c for c in output if c]
     except Exception as e:
-        print("Failed to get back container ID")
-        return None
+        print(f"Failed to get backend container IDs: {e}")
+        return []
+
 
 def run_fault_tolerance_test():
-    print("Starting fault tolerance test")
-    try:
-        pre_check = requests.get(URL, timeout=2)
-        if pre_check.status_code != 200:
-            print("pre check failed")
-            return
-    except:
-        print("Impossible connection to backend")
+    print("Starting Swarm Healing Time test...")
 
-    container_id = get_backend_container_id()
-    if not container_id:
-        print("Container not found")
+    # 1. Ottieni stato iniziale
+    initial_ids = get_backend_container_ids()
+    if not initial_ids:
+        print("No backend containers found. Is the stack running?")
         return
 
-    print(f"Target Container: {container_id}")
+    initial_count = len(initial_ids)
+    print(f"Initial replicas: {initial_count} -> IDs: {initial_ids}")
 
-    # 2. Simulazione Guasto (Crash)
-    print(f"KILLING container {container_id}...")
-    subprocess.run(f"docker kill {container_id}", shell=True)
+    # 2. Scegli vittima e uccidi
+    target_container = initial_ids[0]
+    print(f"Killing container: {target_container}")
+    subprocess.run(f"docker kill {target_container}", shell=True, stdout=subprocess.DEVNULL)
 
-    start_downtime = time.time()
+    start_time = time.time()
 
-    # Simulazione Reazione Orchestratore (Restart)
-    # In K8s/Swarm è automatico. Qui lo forziamo per misurare il tempo di boot del container.
-    print("Orchestrator restarting container...")
-    subprocess.run(f"docker start {container_id}", shell=True)
-    ###############
+    # 3. Loop di attesa (Misura il tempo di rigenerazione di Swarm)
+    # CORREZIONE 2: Non controlliamo l'HTTP 200, ma lo stato del cluster
+    print("Waiting for Swarm to provision new replica...")
 
+    new_container_id = None
+    timeout = 30  # timeout di sicurezza
+    elapsed = 0
 
-    attempts = 0
-    while True:
-        try:
-            resp = requests.get(URL, timeout=1)
-            if resp.status_code == 200:
-                end_downtime = time.time()
+    while elapsed < timeout:
+        current_ids = get_backend_container_ids()
+
+        # Condizione di successo:
+        # A. Siamo tornati al numero originale di repliche
+        # B. La lista degli ID è diversa (il vecchio è morto, uno nuovo è nato)
+        if len(current_ids) == initial_count and target_container not in current_ids:
+            # Troviamo chi è il nuovo
+            for cid in current_ids:
+                if cid not in initial_ids:
+                    new_container_id = cid
+                    break
+
+            # Se abbiamo trovato il nuovo, usciamo dal loop
+            if new_container_id:
                 break
-        except requests.RequestException:
-            pass
 
-        time.sleep(0.2)
-        attempts += 1
-        if attempts > 100:  # Timeout sicurezza 20s
-            print("Timeout: service is dead")
-            return
+        time.sleep(0.5)
+        elapsed = time.time() - start_time
 
-    recovery_time = end_downtime - start_downtime
-    print(f"Downtime: {recovery_time:.4f} seconds")
+    recovery_time = time.time() - start_time
+
+    if new_container_id:
+        print(f"\nRECOVERY COMPLETE")
+        print(f"Swarm Healing Time: {recovery_time:.4f} seconds")
+        print(f"New Container ID: {new_container_id}")
+        print(f"Current Backend IDs: {current_ids}")
+    else:
+        print(f"\nTimeout reached. Swarm did not recover in {timeout}s.")
 
 
 if __name__ == "__main__":
