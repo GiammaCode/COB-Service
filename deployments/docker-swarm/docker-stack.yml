@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   frontend:
-    image: 127.0.0.1:5000/cob-service-frontend:latest  # <--- CHANGED
+    image: 192.168.15.9:5000/cob-service-frontend:latest
     ports:
       - "3000:3000"
     environment:
@@ -22,7 +22,7 @@ services:
       - backend
 
   backend:
-    image: 127.0.0.1:5000/cob-service-backend:latest   # <--- CHANGED
+    image: 192.168.15.9:5000/cob-service-backend:latest
     ports:
       - "5001:5000"
     environment:
