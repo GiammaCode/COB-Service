@@ -16,6 +16,38 @@ def log(message):
     """Output on stderr"""
     print(f"[SCHED] {message}", file=sys.stderr)
 
+
+def get_service_state(service_name):
+    """
+    Return service state
+    'not_found', 'pending', 'running', 'failed'
+    """
+    try:
+        # Verifica se il servizio esiste
+        cmd = f"docker service inspect {service_name} --format '{{{{.ID}}}}'"
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        if result.returncode != 0:
+            return "not_found", None
+
+        # Verifica lo stato dei task
+        cmd = f"docker service ps {service_name} --format '{{{{.CurrentState}}}}' --filter 'desired-state=running'"
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        states = result.stdout.strip().split('\n')
+
+        for state in states:
+            if state.lower().startswith('running'):
+                return "running", state
+            elif 'pending' in state.lower() or 'preparing' in state.lower():
+                return "pending", state
+            elif 'failed' in state.lower() or 'rejected' in state.lower():
+                return "failed", state
+
+        return "pending", states[0] if states else None
+
+    except Exception as e:
+        return "error", str(e)
+
+
 def cleanup_test_service():
     subprocess.run(
         f"docker service rm {TEST_SERVICE_NAME}",
@@ -24,8 +56,75 @@ def cleanup_test_service():
         stderr=subprocess.DEVNULL,
     )
 
+
 def measure_single_scheduling():
     cleanup_test_service()
+    result = {
+        "success": False,
+        "total_time": None,
+        "phases": {
+            "command_accepted": None,
+            "scheduling_to_running": None
+        },
+        "final_stage": None,
+        "node_assigned": None
+    }
+    create_cmd = f"""docker service create \
+            --name {TEST_SERVICE_NAME} \
+            --replicas 1 \
+            --restart-condition none \
+            --network {STACK_NAME}_cob-service \
+            {TEST_IMAGE}"""
+
+    start_time = time.time()
+
+    proc = subprocess.run(
+        create_cmd,
+        shell=True,
+        capture_output=True,
+        text=True,
+    )
+    command_accepted_time = time.time()
+    result["phases"]["command_accepted"] = round(command_accepted_time - start_time, 4)
+
+    if proc.returncode != 0:
+        result["error"] = proc.stderr
+        cleanup_test_service()
+        return result
+
+    # Fase 2: Polling fino a stato running
+    while True:
+        elapsed = time.time() - start_time
+        if elapsed > TIMEOUT_SECONDS:
+            result["error"] = "Timeout waiting for container to start"
+            result["final_state"] = "timeout"
+            break
+
+        state, details = get_service_state(TEST_SERVICE_NAME)
+
+        if state == "running":
+            total_time = time.time() - start_time
+            result["success"] = True
+            result["total_time"] = round(total_time, 4)
+            result["phases"]["scheduling_to_running"] = round(total_time - result["phases"]["command_accepted"], 4)
+            result["final_state"] = "running"
+
+            # Recupera il nodo assegnato
+            node_cmd = f"docker service ps {TEST_SERVICE_NAME} --format '{{{{.Node}}}}' --filter 'desired-state=running'"
+            node_result = subprocess.run(node_cmd, shell=True, capture_output=True, text=True)
+            result["node_assigned"] = node_result.stdout.strip()
+            break
+
+        elif state == "failed":
+            result["error"] = f"Service failed: {details}"
+            result["final_state"] = "failed"
+            break
+
+        time.sleep(0.1)  # Polling ogni 100ms per precisione
+
+    cleanup_test_service()
+    return result
+
 
 def run_scheduling_overhead_test():
     log(f"start scheduling overhead test, {NUM_ITERATIONS} iterations")
@@ -39,7 +138,7 @@ def run_scheduling_overhead_test():
     nodes_used = 0
 
     for i in range(NUM_ITERATIONS):
-        log(f"iteration {i+1}/{NUM_ITERATIONS}")
+        log(f"iteration {i + 1}/{NUM_ITERATIONS}")
 
         measurement = measure_single_scheduling()
         measurements.append(measurement)
@@ -55,7 +154,7 @@ def run_scheduling_overhead_test():
 
         time.sleep(1)
 
-    #stats
+    # stats
     successful_times = [m["total_time"] for m in measurements if m["success"]]
     command_times = [m["phases"]["command_accepted"] for m in measurements if m["success"]]
     scheduling_times = [m["phases"]["scheduling_to_running"] for m in measurements if m["success"]]
