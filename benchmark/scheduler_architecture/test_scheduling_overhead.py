@@ -1,24 +1,38 @@
+"""
+Test: Scheduling Overhead
+Taxonomy Category: Scheduler Architecture
+
+Measures the time required for the orchestrator to:
+1. Receive the deployment request
+2. Decide which node to place the container on (scheduling decision)
+3. Create and start the container
+
+This test reveals the efficiency of Swarm's centralized scheduler.
+"""
+
 import subprocess
 import time
 import json
 import sys
 import statistics
 
-# Configurazione
+# Configuration
 STACK_NAME = "cob-service"
 TEST_SERVICE_NAME = "scheduling-test"
-TEST_IMAGE = "cob-service-backend:latest"  # Immagine già presente sui nodi
-NUM_ITERATIONS = 10  # Numero di ripetizioni per statistiche affidabili
+REGISTRY = "192.168.15.9:5000"
+TEST_IMAGE = f"{REGISTRY}/cob-service-backend:latest"  # Full path with registry
+NETWORK_NAME = "cob-service_cob-service"  # Actual overlay network name
+NUM_ITERATIONS = 10  # Number of iterations for reliable statistics
 TIMEOUT_SECONDS = 60
 
 
 def log(message):
-    """Output su stderr per non interferire con JSON finale"""
+    """Output to stderr to not interfere with final JSON"""
     print(f"[SCHED] {message}", file=sys.stderr)
 
 
 def cleanup_test_service():
-    """Rimuove il servizio di test se esiste"""
+    """Remove test service if it exists"""
     subprocess.run(
         f"docker service rm {TEST_SERVICE_NAME}",
         shell=True,
@@ -31,8 +45,8 @@ def cleanup_test_service():
 
 def get_service_state(service_name):
     """
-    Ritorna lo stato del servizio.
-    Possibili stati: 'not_found', 'pending', 'running', 'failed'
+    Returns the service state.
+    Possible states: 'not_found', 'pending', 'running', 'failed'
     """
     try:
         # Verifica se il servizio esiste
@@ -62,11 +76,11 @@ def get_service_state(service_name):
 
 def measure_single_scheduling():
     """
-    Misura il tempo di scheduling per una singola creazione di servizio.
+    Measures scheduling time for a single service creation.
 
-    Ritorna un dizionario con:
-    - total_time: tempo totale dall'invio comando a container running
-    - phases: breakdown delle fasi (se misurabile)
+    Returns a dictionary with:
+    - total_time: total time from command sent to container running
+    - phases: breakdown of phases (if measurable)
     - success: boolean
     """
     cleanup_test_service()
@@ -75,19 +89,19 @@ def measure_single_scheduling():
         "success": False,
         "total_time": None,
         "phases": {
-            "command_accepted": None,  # Tempo fino a quando docker risponde
-            "scheduling_to_running": None  # Tempo da accepted a running
+            "command_accepted": None,  # Time until docker responds
+            "scheduling_to_running": None  # Time from accepted to running
         },
         "final_state": None,
         "node_assigned": None
     }
 
-    # Fase 1: Invio comando e attesa risposta
+    # Phase 1: Send command and wait for response
     create_cmd = f"""docker service create \
         --name {TEST_SERVICE_NAME} \
         --replicas 1 \
         --restart-condition none \
-        --network {STACK_NAME}_cob-service \
+        --network {NETWORK_NAME} \
         {TEST_IMAGE}"""
 
     start_time = time.time()
@@ -107,7 +121,7 @@ def measure_single_scheduling():
         cleanup_test_service()
         return result
 
-    # Fase 2: Polling fino a stato running
+    # Phase 2: Poll until running state
     while True:
         elapsed = time.time() - start_time
         if elapsed > TIMEOUT_SECONDS:
@@ -144,11 +158,11 @@ def measure_single_scheduling():
 
 
 def run_scheduling_overhead_test():
-    """Esegue il test completo con multiple iterazioni"""
-    log(f"Avvio test Scheduling Overhead ({NUM_ITERATIONS} iterazioni)")
-    log(f"Immagine di test: {TEST_IMAGE}")
+    """Run complete test with multiple iterations"""
+    log(f"Starting Scheduling Overhead test ({NUM_ITERATIONS} iterations)")
+    log(f"Test image: {TEST_IMAGE}")
 
-    # Pre-pulizia
+    # Pre-cleanup
     cleanup_test_service()
 
     measurements = []
@@ -157,26 +171,26 @@ def run_scheduling_overhead_test():
     nodes_used = {}
 
     for i in range(NUM_ITERATIONS):
-        log(f"Iterazione {i + 1}/{NUM_ITERATIONS}...")
+        log(f"Iteration {i + 1}/{NUM_ITERATIONS}...")
 
         measurement = measure_single_scheduling()
         measurements.append(measurement)
 
         if measurement["success"]:
             successful_runs += 1
-            log(f"  -> OK: {measurement['total_time']}s (nodo: {measurement['node_assigned']})")
+            log(f"  -> OK: {measurement['total_time']}s (node: {measurement['node_assigned']})")
 
-            # Traccia distribuzione sui nodi
+            # Track node distribution
             node = measurement.get("node_assigned", "unknown")
             nodes_used[node] = nodes_used.get(node, 0) + 1
         else:
             failed_runs += 1
             log(f"  -> FAILED: {measurement.get('error', 'unknown error')}")
 
-        # Pausa tra iterazioni per non sovraccaricare
+        # Pause between iterations to avoid overload
         time.sleep(1)
 
-    # Calcolo statistiche
+    # Calculate statistics
     successful_times = [m["total_time"] for m in measurements if m["success"]]
     command_times = [m["phases"]["command_accepted"] for m in measurements if m["success"]]
     scheduling_times = [m["phases"]["scheduling_to_running"] for m in measurements if m["success"]]
@@ -201,7 +215,7 @@ def run_scheduling_overhead_test():
             }
         }
 
-    # Costruzione risultato finale
+    # Build final result
     result = {
         "test_name": "scheduling_overhead",
         "category": "scheduler_architecture",
