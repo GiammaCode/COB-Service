@@ -1,15 +1,3 @@
-"""
-Test: Concurrent Deployments
-Taxonomy Category: Scheduler Architecture
-
-Measures scheduler behavior under concurrent load:
-- Does scheduling time degrade with more simultaneous requests?
-- Is there a saturation point?
-- How is the request queue handled?
-
-This test reveals the limits of the centralized scheduler architecture.
-"""
-
 import subprocess
 import time
 import json

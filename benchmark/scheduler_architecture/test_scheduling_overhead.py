@@ -1,15 +1,3 @@
-"""
-Test: Scheduling Overhead
-Taxonomy Category: Scheduler Architecture
-
-Measures the time required for the orchestrator to:
-1. Receive the deployment request
-2. Decide which node to place the container on (scheduling decision)
-3. Create and start the container
-
-This test reveals the efficiency of Swarm's centralized scheduler.
-"""
-
 import subprocess
 import time
 import json
