@@ -2,12 +2,12 @@
 Test: Fault Tolerance
 Taxonomy Category: Resource Management -> Fault Tolerance
 
-Measures how Swarm handles container failures:
-1. Detection time: How fast does Swarm detect a failed container?
-2. Recovery time: How fast does Swarm schedule a replacement?
-3. Service availability: How many requests fail during recovery?
+Measures how Swarm handles node failures (simulated via Drain):
+1. Detection time: How fast does Swarm detect a node is unavailable?
+2. Recovery time: How fast does Swarm schedule replacement tasks on other nodes?
+3. Service availability: How many requests fail during the migration?
 
-This test kills containers while generating traffic to measure real-world impact.
+This test drains a node while generating traffic to measure real-world impact.
 """
 
 import subprocess
@@ -30,6 +30,20 @@ TRAFFIC_DURATION = 30  # seconds to generate traffic
 def log(message):
     """Output to stderr to not interfere with final JSON"""
     print(f"[FAULT] {message}", file=sys.stderr)
+
+
+def set_node_availability(node_hostname, availability):
+    """
+    Change the state of a node (active/drain/pause).
+    Executes the command on the Manager node.
+    """
+    cmd = f"docker node update --availability {availability} {node_hostname}"
+    subprocess.run(
+        cmd,
+        shell=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
 
 
 def get_backend_containers():
@@ -62,16 +76,6 @@ def get_container_id_from_task(task_id):
         return container_id[:12] if container_id else None
     except:
         return None
-
-
-def kill_container(task_id):
-    """Kill a container by task ID"""
-    container_id = get_container_id_from_task(task_id)
-    if container_id:
-        cmd = f"docker kill {container_id}"
-        subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return container_id
-    return None
 
 
 class TrafficGenerator:
@@ -208,7 +212,12 @@ def run_single_fault_test(iteration):
 
     # Select target (first container)
     target = initial_containers[0]
-    log(f"  Target: task={target['task_id'][:8]} on {target['node']}")
+    node_to_fail = target['node']
+
+    # Retrieve container ID before it gets killed/moved (for reporting)
+    killed_container_id = get_container_id_from_task(target['task_id'])
+
+    log(f"  Target: task {target['task_id'][:8]} on node {node_to_fail}")
 
     # Start traffic generator in background
     traffic = TrafficGenerator(BACKEND_URL)
@@ -218,15 +227,10 @@ def run_single_fault_test(iteration):
     # Wait a bit for traffic to stabilize
     time.sleep(2)
 
-    # Kill the container
-    log(f"  Killing container...")
+    # Simulate node failure
+    log(f"  Draining node {node_to_fail}...")
     kill_time = time.time()
-    killed_container = kill_container(target["task_id"])
-
-    if not killed_container:
-        traffic.stop()
-        traffic_thread.join()
-        return {"success": False, "error": "Failed to kill container"}
+    set_node_availability(node_to_fail, "drain")
 
     # Measure recovery
     recovery = measure_recovery(kill_time, initial_count, initial_containers)
@@ -236,14 +240,21 @@ def run_single_fault_test(iteration):
     traffic.stop()
     traffic_thread.join()
 
+    # Restore node availability for next tests
+    log(f"  Restoring node {node_to_fail}...")
+    set_node_availability(node_to_fail, "active")
+
+    # Wait for node to be fully ready
+    time.sleep(10)
+
     # Get traffic stats
     traffic_stats = traffic.get_stats()
 
     result = {
         "success": recovery["total_recovery_time"] is not None,
         "killed_task": target["task_id"][:8],
-        "killed_node": target["node"],
-        "killed_container": killed_container,
+        "killed_node": node_to_fail,
+        "killed_container": killed_container_id,
         "recovery": recovery,
         "traffic_during_test": traffic_stats
     }
