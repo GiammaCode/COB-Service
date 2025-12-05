@@ -132,14 +132,14 @@ def simulate_leader_failure(leader_hostname):
     on the leader node.
     """
     # Drain the leader node (removes it from scheduling, simulates partial failure)
-    cmd = f"docker node update --availability drain {leader_hostname}"
+    cmd = f"docker node demote {leader_hostname}"
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     return result.returncode == 0
 
 
 def restore_node(hostname):
     """Restore a drained node to active"""
-    cmd = f"docker node update --availability active {hostname}"
+    cmd = f"docker node promote {hostname}"
     subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
