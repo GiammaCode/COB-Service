@@ -9,8 +9,8 @@
 6 resource_contention			Scalability, Resource Management              X
 7 rolling_update			    High Availability                             ok
 8 load_balancing			    High Throughput                               ok
-9 network_latency               Network Isolation
-10 service_discovery            Network Isolation       
-11 resource_overhead            Resource Management
+9 network_latency               Network Isolation                             ??
+10 service_discovery            Network Isolation                             x  
+11 resource_overhead            Resource Management                           ok
       
 
