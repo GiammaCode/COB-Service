@@ -19,7 +19,7 @@ TESTS = {
     "scalability": [
         {"script": "test_scalability.py", "description": "Horizontal scaling efficiency"},
         {"script": "test_load_balancing.py", "description": "Load distribution fairness"},
-        {"script": "test_rolling_update.py", "description": "Zero-downtime deployments"},
+        {"script": "rolling_update.py", "description": "Zero-downtime deployments"},
     ],
     #"resource_management": [
         #{"script": "test_resource_contention.py", "description": "Resource limits behavior"},
