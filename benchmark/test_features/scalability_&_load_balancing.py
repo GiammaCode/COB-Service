@@ -3,7 +3,7 @@ import requests
 import statistics
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-from ..drivers.swarm_driver import SwarmDriver
+from benchmark.test_features.swarm_driver import SwarmDriver
 
 
 def send_request(_):
