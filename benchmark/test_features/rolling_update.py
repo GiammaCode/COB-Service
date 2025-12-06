@@ -1,7 +1,13 @@
 import time
 import requests
 import threading
-from benchmark.drivers.swarm_driver import SwarmDriver
+import sys
+import os
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+from drivers.swarm_driver import SwarmDriver
 
 def test_rolling_update():
     driver = SwarmDriver()
