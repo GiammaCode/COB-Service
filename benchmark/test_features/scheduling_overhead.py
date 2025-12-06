@@ -1,6 +1,6 @@
 import time
 import requests
-from benchmark.test_features.swarm_driver import SwarmDriver
+from swarm_driver import SwarmDriver
 
 
 def test_scheduling_overhead():

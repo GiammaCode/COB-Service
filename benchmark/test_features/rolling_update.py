@@ -1,7 +1,7 @@
 import time
 import requests
 import threading
-from benchmark.test_features.swarm_driver import SwarmDriver
+from swarm_driver import SwarmDriver
 
 def test_rolling_update():
     driver = SwarmDriver()
