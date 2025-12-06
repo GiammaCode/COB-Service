@@ -9,11 +9,11 @@ from datetime import datetime
 # Test definitions organized by taxonomy category
 TESTS = {
     "scheduler_architecture": [
-        {"script": "test_scheduling_overhead.py", "description": "Measures scheduler decision time"},
+        {"script": "scheduling_overhead.py", "description": "Measures scheduler decision time"},
         {"script": "test_concurrent_deployments.py", "description": "Tests scheduler under concurrent load"},
     ],
     "fault_tolerance": [
-        {"script": "test_fault_tolerance.py", "description": "Container failure recovery"},
+        {"script": "fault_tolerance.py", "description": "Container failure recovery"},
         #{"script": "test_leader_election.py", "description": "Control plane failover"},
     ],
     "scalability": [
@@ -36,8 +36,8 @@ TESTS = {
 # Quick test subset for fast validation
 QUICK_TESTS = [
     "test_load_balancing.py",
-    "test_fault_tolerance.py",
-    "test_scheduling_overhead.py",
+    "fault_tolerance.py",
+    "scheduling_overhead.py",
 ]
 
 OUTPUT_DIR = "results"
