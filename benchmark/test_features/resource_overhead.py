@@ -1,4 +1,4 @@
-from swarm_driver import SwarmDriver
+from benchmark.drivers.swarm_driver import SwarmDriver
 
 
 def test_resource_overhead():

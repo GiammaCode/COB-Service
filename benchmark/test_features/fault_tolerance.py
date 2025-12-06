@@ -1,7 +1,7 @@
 import time
 import requests
 import threading
-from swarm_driver import (SwarmDriver)
+from benchmark.drivers.swarm_driver import (SwarmDriver)
 
 stop_traffic = False
 errors = []

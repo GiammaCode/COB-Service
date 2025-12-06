@@ -3,7 +3,7 @@ import requests
 import statistics
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-from swarm_driver import SwarmDriver
+from benchmark.drivers.swarm_driver import SwarmDriver
 import json
 
 
