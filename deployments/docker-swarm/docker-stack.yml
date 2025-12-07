@@ -40,6 +40,12 @@ services:
       #  reservations:
       #    cpus: '0.25'
       #    memory: 256M
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      restart_policy:
+          condition: on-failure
     depends_on:
       - db
 
