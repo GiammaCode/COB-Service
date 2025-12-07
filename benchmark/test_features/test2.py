@@ -8,11 +8,10 @@ import sys
 def cleanup():
     """Rimuove servizi e reti residui per evitare errori"""
     print("   -> Esecuzione pulizia risorse pre/post test...")
-    # Ignoriamo stderr per evitare confusione se non esistono
     subprocess.run("docker service rm iperf-server iperf-client", shell=True, stderr=subprocess.DEVNULL,
                    stdout=subprocess.DEVNULL)
     subprocess.run("docker network rm bench-net", shell=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-    time.sleep(3)  # Tempo tecnico per lo svuotamento della rete
+    time.sleep(3)
 
 
 def run_test():
@@ -29,21 +28,19 @@ def run_test():
         subprocess.check_call(f"docker network create -d overlay {net_name}", shell=True)
 
         print("2. Avvio Server iperf3 (sul Manager)...")
-        # FIX: Usiamo il ruolo invece del nome host. Il server va sul Leader.
         subprocess.check_call(
             f"docker service create --name iperf-server --network {net_name} --constraint 'node.role==manager' networkstatic/iperf3 -s",
             shell=True)
 
         print("3. Avvio Client iperf3 (su un Worker)...")
-        # FIX: Usiamo il ruolo worker. Dato che hai demosso gli altri nodi, questo funzionerà e metterà il client su una macchina fisica diversa.
+        # Nota: iperf3 con -J produce JSON, ma se fallisce la connessione stampa testo semplice.
         subprocess.check_call(
             f"docker service create --name iperf-client --network {net_name} --constraint 'node.role==worker' networkstatic/iperf3 -c iperf-server -J",
             shell=True)
 
         print("4. Attesa esecuzione test (30s)...")
-        # Loop visivo per l'attesa
         for i in range(30):
-            sys.stdout.write(f"\r   Attesa completamento e download... {30 - i}s")
+            sys.stdout.write(f"\r   Attesa completamento... {30 - i}s")
             sys.stdout.flush()
             time.sleep(1)
         print("\n")
@@ -56,28 +53,41 @@ def run_test():
         except subprocess.CalledProcessError:
             output = ""
 
+        gbps = 0
+
         # Debug: se l'output è vuoto
         if not output.strip():
-            print("ATTENZIONE: Output vuoto. Controllo stato servizio...")
-            subprocess.run("docker service ps iperf-client", shell=True)
-            gbps = 0
+            print("ATTENZIONE: Output vuoto. Il container potrebbe essere crashato o pending.")
         else:
-            # Pulizia output per trovare il JSON
-            json_match = re.search(r'\{.*\}', output, re.DOTALL)
+            # FIX: Regex più specifica. Iperf3 JSON inizia sempre con un oggetto che ha la chiave "start"
+            # Cerchiamo '{' seguito da spazi/a-capo e poi "start":
+            json_match = re.search(r'(\{.*"start":.*\}\s*$)', output, re.DOTALL)
+
+            # Se il primo tentativo fallisce, proviamo la vecchia regex ma stampiamo l'errore se fallisce
+            if not json_match:
+                json_match = re.search(r'\{.*\}', output, re.DOTALL)
+
             if json_match:
+                json_str = json_match.group(0)
                 try:
-                    iperf_data = json.loads(json_match.group(0))
-                    # Estrazione dati dal JSON di iperf3
-                    bits_per_second = iperf_data.get('end', {}).get('sum_received', {}).get('bits_per_second', 0)
-                    gbps = bits_per_second / 1e9
-                except Exception as e:
-                    print(f"Errore parsing JSON interno: {e}")
+                    iperf_data = json.loads(json_str)
+
+                    # Verifica se c'è un errore riportato nel JSON (es. "error": "connection refused")
+                    if "error" in iperf_data:
+                        print(f"ERRORE IPERF RILEVATO: {iperf_data['error']}")
+                        gbps = -1
+                    else:
+                        bits_per_second = iperf_data.get('end', {}).get('sum_received', {}).get('bits_per_second', 0)
+                        gbps = bits_per_second / 1e9
+
+                except json.JSONDecodeError as e:
+                    print(f"ERRORE PARSING JSON: {e}")
+                    print(f"--- OUTPUT GREZZO (DEBUG) ---\n{output}\n-----------------------------")
                     gbps = 0
             else:
+                print("IMPOSSIBILE TROVARE JSON VALIDO NEI LOG.")
+                print(f"--- OUTPUT GREZZO (DEBUG) ---\n{output}\n-----------------------------")
                 gbps = 0
-                print("Impossibile trovare JSON valido nell'output.")
-                # Stampa solo l'inizio per non intasare la console
-                print(f"Log parziali:\n{output[:300]}...")
 
     except subprocess.CalledProcessError as e:
         print(f"Errore esecuzione comando Docker: {e}")
