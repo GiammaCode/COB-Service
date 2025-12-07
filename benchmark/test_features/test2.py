@@ -8,10 +8,11 @@ import sys
 def cleanup():
     """Rimuove servizi e reti residui per evitare errori"""
     print("   -> Esecuzione pulizia risorse pre/post test...")
+    # Ignoriamo stderr per evitare confusione se non esistono
     subprocess.run("docker service rm iperf-server iperf-client", shell=True, stderr=subprocess.DEVNULL,
                    stdout=subprocess.DEVNULL)
     subprocess.run("docker network rm bench-net", shell=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-    time.sleep(2)  # Dai tempo a Docker di recepire la rimozione
+    time.sleep(3)  # Tempo tecnico per lo svuotamento della rete
 
 
 def run_test():
@@ -25,25 +26,25 @@ def run_test():
     try:
         # 2. Setup Rete e Servizi
         print("1. Creazione rete overlay...")
-        # Rimuovi stdout=subprocess.DEVNULL per vedere se si blocca qui
         subprocess.check_call(f"docker network create -d overlay {net_name}", shell=True)
 
-        print("2. Avvio Server iperf3 (su Manager)...")
+        print("2. Avvio Server iperf3 (su swarm09)...")
+        # Constraint: forza l'esecuzione sul manager specificato
         subprocess.check_call(
-            f"docker service create --name iperf-server --network {net_name} --constraint 'node.role==manager' networkstatic/iperf3 -s",
+            f"docker service create --name iperf-server --network {net_name} --constraint 'node.hostname==swarm09' networkstatic/iperf3 -s",
             shell=True)
 
-        print("3. Avvio Client iperf3 (su Worker)...")
-        # Il client deve partire dopo che il server è pronto, ma docker gestisce il retry.
-        # Aggiungiamo constraint worker per forzare traffico di rete reale
+        print("3. Avvio Client iperf3 (su nodo REMOTO)...")
+        # MODIFICA CHIAVE: Invece di 'node.role==worker', usiamo 'node.hostname!=swarm09'.
+        # Questo forza il container su swarm10 o swarm11, indipendentemente dal loro ruolo (Manager/Worker).
         subprocess.check_call(
-            f"docker service create --name iperf-client --network {net_name} --constraint 'node.role==worker' networkstatic/iperf3 -c iperf-server -J",
+            f"docker service create --name iperf-client --network {net_name} --constraint 'node.hostname!=swarm09' networkstatic/iperf3 -c iperf-server -J",
             shell=True)
 
-        print("4. Attesa esecuzione test (30s per pull immagini e test)...")
-        # Aumentato a 30s perché se deve scaricare l'immagine ci mette tempo
+        print("4. Attesa esecuzione test (30s)...")
+        # Loop visivo per l'attesa
         for i in range(30):
-            sys.stdout.write(f"\r   Attesa... {30 - i}s")
+            sys.stdout.write(f"\r   Attesa completamento e download... {30 - i}s")
             sys.stdout.flush()
             time.sleep(1)
         print("\n")
@@ -51,11 +52,14 @@ def run_test():
         # 3. Recupero logs dal client
         print("5. Recupero risultati...")
         cmd = "docker service logs iperf-client --no-task-ids --raw"
-        output = subprocess.check_output(cmd, shell=True).decode()
+        try:
+            output = subprocess.check_output(cmd, shell=True).decode()
+        except subprocess.CalledProcessError:
+            output = ""
 
-        # Debug: se l'output è vuoto, significa che il container non è partito o è in errore
+        # Debug: se l'output è vuoto
         if not output.strip():
-            print("ATTENZIONE: Output dei log vuoto. Il container client potrebbe essere in stato 'Pending' o 'Error'.")
+            print("ATTENZIONE: Output vuoto. Controllo stato servizio...")
             subprocess.run("docker service ps iperf-client", shell=True)
             gbps = 0
         else:
@@ -64,7 +68,7 @@ def run_test():
             if json_match:
                 try:
                     iperf_data = json.loads(json_match.group(0))
-                    # iperf3 JSON structure: end -> sum_received -> bits_per_second
+                    # Estrazione dati dal JSON di iperf3
                     bits_per_second = iperf_data.get('end', {}).get('sum_received', {}).get('bits_per_second', 0)
                     gbps = bits_per_second / 1e9
                 except Exception as e:
@@ -73,23 +77,26 @@ def run_test():
             else:
                 gbps = 0
                 print("Impossibile trovare JSON valido nell'output.")
-                print(f"Output Grezzo:\n{output[:200]}...")  # Stampa i primi 200 carattteri per debug
+                print(f"Log parziali:\n{output[:300]}...")
 
     except subprocess.CalledProcessError as e:
         print(f"Errore esecuzione comando Docker: {e}")
+        gbps = -1
+    except KeyboardInterrupt:
+        print("\nTest interrotto manualmente.")
         gbps = -1
     except Exception as e:
         print(f"Errore generico: {e}")
         gbps = -1
     finally:
-        # 4. Cleanup Finale (sempre eseguito)
+        # 4. Cleanup Finale
         cleanup()
 
     results = {
         "test_name": "Network Overhead Test",
         "network_type": "Overlay",
         "throughput_gbps": round(gbps, 3),
-        "notes": "Traffic routed Manager <-> Worker"
+        "notes": "Traffic routed swarm09 <-> Remote Node (Anti-Affinity)"
     }
 
     print("\nRISULTATO TEST RETE:")
