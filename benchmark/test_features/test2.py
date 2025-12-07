@@ -28,17 +28,16 @@ def run_test():
         print("1. Creazione rete overlay...")
         subprocess.check_call(f"docker network create -d overlay {net_name}", shell=True)
 
-        print("2. Avvio Server iperf3 (su swarm09)...")
-        # Constraint: forza l'esecuzione sul manager specificato
+        print("2. Avvio Server iperf3 (sul Manager)...")
+        # FIX: Usiamo il ruolo invece del nome host. Il server va sul Leader.
         subprocess.check_call(
-            f"docker service create --name iperf-server --network {net_name} --constraint 'node.hostname==swarm09' networkstatic/iperf3 -s",
+            f"docker service create --name iperf-server --network {net_name} --constraint 'node.role==manager' networkstatic/iperf3 -s",
             shell=True)
 
-        print("3. Avvio Client iperf3 (su nodo REMOTO)...")
-        # MODIFICA CHIAVE: Invece di 'node.role==worker', usiamo 'node.hostname!=swarm09'.
-        # Questo forza il container su swarm10 o swarm11, indipendentemente dal loro ruolo (Manager/Worker).
+        print("3. Avvio Client iperf3 (su un Worker)...")
+        # FIX: Usiamo il ruolo worker. Dato che hai demosso gli altri nodi, questo funzionerà e metterà il client su una macchina fisica diversa.
         subprocess.check_call(
-            f"docker service create --name iperf-client --network {net_name} --constraint 'node.hostname!=swarm09' networkstatic/iperf3 -c iperf-server -J",
+            f"docker service create --name iperf-client --network {net_name} --constraint 'node.role==worker' networkstatic/iperf3 -c iperf-server -J",
             shell=True)
 
         print("4. Attesa esecuzione test (30s)...")
@@ -77,6 +76,7 @@ def run_test():
             else:
                 gbps = 0
                 print("Impossibile trovare JSON valido nell'output.")
+                # Stampa solo l'inizio per non intasare la console
                 print(f"Log parziali:\n{output[:300]}...")
 
     except subprocess.CalledProcessError as e:
@@ -96,7 +96,7 @@ def run_test():
         "test_name": "Network Overhead Test",
         "network_type": "Overlay",
         "throughput_gbps": round(gbps, 3),
-        "notes": "Traffic routed swarm09 <-> Remote Node (Anti-Affinity)"
+        "notes": "Traffic routed Manager (Leader) <-> Worker"
     }
 
     print("\nRISULTATO TEST RETE:")
