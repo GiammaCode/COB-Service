@@ -7,48 +7,41 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 from drivers.swarm_driver import SwarmDriver
+import config
 
+def test_scheduling():
+    driver = SwarmDriver(config.STACK_NAME)
+    target = 10  # Ora possiamo osare 10 perché abbiamo tolto i limiti!
 
-def test_scheduling_overhead():
-    driver = SwarmDriver()
-    target_replicas = 5
+    # Reset iniziale
+    driver.scale_service(config.SERVICE_NAME, 0)
+    time.sleep(5)
 
-    # 1. Reset
-    driver.scale_service("backend", 0)
-    time.sleep(5)  # Attesa tecnica cleanup
+    print(f"--- Scheduling Overhead (Target: {target}) ---")
+    start = time.time()
 
-    print("--- Start Scheduling Overhead Test ---")
-    start_time = time.time()
+    driver.scale_service(config.SERVICE_NAME, target)
 
-    # 2. Command
-    driver.scale_service("backend", target_replicas)
-    command_sent_time = time.time()
-
-    # 3. Measure (Polling HTTP)
-    active_replicas = 0
-    while active_replicas < target_replicas:
+    # Polling HTTP (Black Box)
+    active = 0
+    while active < target:
         try:
-            # Facciamo N richieste per vedere quanti container unici rispondono
             unique_ids = set()
-            for _ in range(target_replicas * 2):
-                resp = requests.get("http://localhost:5001/", timeout=1)
+            # Fai più richieste delle repliche attese per beccarle tutte
+            for _ in range(target * 3):
+                resp = requests.get(config.API_URL, timeout=1)
                 if resp.status_code == 200:
                     unique_ids.add(resp.json().get('container_id'))
-
-            active_replicas = len(unique_ids)
-            print(f"Replicas responding: {active_replicas}/{target_replicas}")
-
-            if active_replicas >= target_replicas:
-                break
+            active = len(unique_ids)
+            print(f"Active: {active}/{target}")
+            if active == target: break
         except:
             pass
         time.sleep(0.5)
 
-    end_time = time.time()
-
-    print(f"Result: {end_time - start_time:.4f} seconds")
-    return end_time - start_time
+    duration = time.time() - start
+    print(f"RESULT: {duration:.2f} seconds")
 
 
 if __name__ == "__main__":
-    test_scheduling_overhead()
+    test_scheduling()
