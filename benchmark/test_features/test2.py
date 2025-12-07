@@ -33,7 +33,7 @@ def run_test():
             shell=True)
 
         print("3. Avvio Client iperf3 (su un Worker)...")
-        # Nota: iperf3 con -J produce JSON, ma se fallisce la connessione stampa testo semplice.
+        # Nota: iperf3 con -J produce JSON
         subprocess.check_call(
             f"docker service create --name iperf-client --network {net_name} --constraint 'node.role==worker' networkstatic/iperf3 -c iperf-server -J",
             shell=True)
@@ -55,24 +55,21 @@ def run_test():
 
         gbps = 0
 
-        # Debug: se l'output è vuoto
         if not output.strip():
             print("ATTENZIONE: Output vuoto. Il container potrebbe essere crashato o pending.")
         else:
-            # FIX: Regex più specifica. Iperf3 JSON inizia sempre con un oggetto che ha la chiave "start"
-            # Cerchiamo '{' seguito da spazi/a-capo e poi "start":
-            json_match = re.search(r'(\{.*"start":.*\}\s*$)', output, re.DOTALL)
+            # FIX ROBUSTEZZA:
+            # I log potrebbero contenere output di riavvii precedenti (es. {...} {...}).
+            # Cerchiamo l'ULTIMA occorrenza di '{"start":' che indica l'inizio dell'ultimo report JSON.
+            json_start_index = output.rfind('{"start":')
 
-            # Se il primo tentativo fallisce, proviamo la vecchia regex ma stampiamo l'errore se fallisce
-            if not json_match:
-                json_match = re.search(r'\{.*\}', output, re.DOTALL)
+            if json_start_index != -1:
+                # Prendiamo tutto dall'ultimo '{"start":' fino alla fine
+                clean_json_str = output[json_start_index:]
 
-            if json_match:
-                json_str = json_match.group(0)
                 try:
-                    iperf_data = json.loads(json_str)
+                    iperf_data = json.loads(clean_json_str)
 
-                    # Verifica se c'è un errore riportato nel JSON (es. "error": "connection refused")
                     if "error" in iperf_data:
                         print(f"ERRORE IPERF RILEVATO: {iperf_data['error']}")
                         gbps = -1
@@ -82,11 +79,13 @@ def run_test():
 
                 except json.JSONDecodeError as e:
                     print(f"ERRORE PARSING JSON: {e}")
-                    print(f"--- OUTPUT GREZZO (DEBUG) ---\n{output}\n-----------------------------")
+                    print("Suggerimento: L'output potrebbe essere tronco.")
                     gbps = 0
             else:
-                print("IMPOSSIBILE TROVARE JSON VALIDO NEI LOG.")
-                print(f"--- OUTPUT GREZZO (DEBUG) ---\n{output}\n-----------------------------")
+                print("IMPOSSIBILE TROVARE UN JSON 'START' VALIDO NEI LOG.")
+                # Stampa solo l'inizio e la fine per debug senza intasare tutto
+                print(f"Output Head:\n{output[:200]}...")
+                print(f"Output Tail:\n...{output[-200:]}")
                 gbps = 0
 
     except subprocess.CalledProcessError as e:
