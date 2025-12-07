@@ -1,22 +1,24 @@
 import time
 import requests
+import sys
+import os
+import json
 import statistics
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-import sys
-import os
+
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
+import config
 from drivers.swarm_driver import SwarmDriver
-import json
 
 
 def send_request(_):
     try:
         start = time.time()
-        resp = requests.get("http://localhost:5001/", timeout=2)
+        resp = requests.get(config.API_URL, timeout=2)
         latency = time.time() - start
         return {
             "success": resp.status_code == 200,
@@ -28,18 +30,22 @@ def send_request(_):
 
 
 def test_scalability():
-    driver = SwarmDriver()
-    levels = [1, 3, 5]
-    results = {}
+    driver = SwarmDriver(config.STACK_NAME)
+    levels = [1, 3, 5]  # Puoi aggiungere 10 se i nodi reggono
 
-    print("--- Start Scalability Test ---")
+    output = {
+        "test_name": "scalability_and_lb",
+        "results": []
+    }
+
+    print("--- Scalability & Load Balancing Test ---")
 
     for replicas in levels:
-        print(f"Testing {replicas} replicas...")
-        driver.scale_service("backend", replicas)
-        time.sleep(5 + replicas)  # Wait stabilization
+        print(f"\n[TEST] Scaling to {replicas} replicas...")
+        driver.scale_service(config.SERVICE_NAME, replicas)
+        time.sleep(10)  # Wait stabilization
 
-        # Load Test
+        print(f"[TEST] Generating load (500 reqs)...")
         num_requests = 500
         start_bench = time.time()
 
@@ -48,7 +54,7 @@ def test_scalability():
 
         duration = time.time() - start_bench
 
-        # Analyze
+        # Analisi Dati
         successful = [d for d in data if d['success']]
         rps = len(successful) / duration
         latencies = [d['latency'] for d in successful]
@@ -56,17 +62,24 @@ def test_scalability():
 
         # Load Balancing Check
         containers = [d['container'] for d in successful if d['container']]
+        unique_containers = len(set(containers))
         counts = Counter(containers).values()
         std_dev_balance = statistics.stdev(counts) if len(counts) > 1 else 0
 
-        results[replicas] = {
-            "rps": rps,
-            "latency": avg_lat,
-            "balance_std_dev": std_dev_balance
+        res = {
+            "replicas": replicas,
+            "throughput_rps": round(rps, 2),
+            "avg_latency_ms": round(avg_lat * 1000, 2),
+            "unique_responders": unique_containers,
+            "balance_std_dev": round(std_dev_balance, 2)
         }
-        print(f"-> {replicas} Replicas: {rps:.2f} RPS, {avg_lat * 1000:.2f}ms Latency")
+        output["results"].append(res)
 
-    print(json.dumps(results, indent=2))
+        print(f"-> RPS: {rps:.2f} | Latency: {avg_lat * 1000:.2f}ms | Unique Containers: {unique_containers}")
+
+    # Salva JSON
+    with open("results_scalability.json", "w") as f:
+        json.dump(output, f, indent=2)
 
 
 if __name__ == "__main__":

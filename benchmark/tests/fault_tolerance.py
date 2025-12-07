@@ -3,68 +3,92 @@ import requests
 import threading
 import sys
 import os
+import json
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
+import config
 from drivers.swarm_driver import SwarmDriver
 
 stop_traffic = False
-errors = []
+traffic_log = []
+
 
 def traffic_generator():
     while not stop_traffic:
+        timestamp = time.time()
+        status = 0
         try:
-            resp = requests.get("http://localhost:5001/", timeout=1)
-            if resp.status_code != 200:
-                errors.append(time.time())
+            resp = requests.get(config.API_URL, timeout=1)
+            status = resp.status_code
         except:
-            errors.append(time.time())
+            status = 500
+
+        traffic_log.append({"ts": timestamp, "status": status})
         time.sleep(0.1)
+
 
 def test_fault_tolerance():
     global stop_traffic
-    driver = SwarmDriver()
+    driver = SwarmDriver(config.STACK_NAME)
 
-    # Setup: Assicurati di avere repliche su più nodi
-    driver.scale_service("backend", 4)
+    print("--- Fault Tolerance Test ---")
+
+    # 1. Setup stabile (almeno 3 repliche per avere ridondanza)
+    driver.scale_service(config.SERVICE_NAME, 3)
     time.sleep(10)
 
-    victim_node = driver.get_worker_nodes()[0] # Prendi un worker a caso
+    # Identifica vittima
+    workers = driver.get_worker_nodes()
+    if not workers:
+        print("[ERROR] No worker nodes found to kill!")
+        return
+    victim = workers[0]
 
-    print(f"--- Start Fault Tolerance (Killing {victim_node}) ---")
-
-    # 1. Start Traffic
+    print(f"[TEST] Starting background traffic...")
     t = threading.Thread(target=traffic_generator)
     t.start()
+    time.sleep(5)  # Traffico normale
 
-    # 2. Kill Node
-    time.sleep(2)
+    print(f"[TEST] KILLING NODE: {victim}")
     kill_time = time.time()
-    driver.drain_node(victim_node)
+    driver.drain_node(victim)
 
-    # 3. Wait for recovery logic
-    time.sleep(15)
+    # 2. Attendi recovery
+    time.sleep(20)
 
-    # 4. Stop & Measure
+    # 3. Stop & Analyze
     stop_traffic = True
     t.join()
 
-    # Ripristina nodo
-    driver.active_node(victim_node)
+    # Ripristina nodo per il futuro
+    print(f"[TEST] Restoring node {victim}...")
+    driver.active_node(victim)
 
-    if not errors:
-        print("Result: 0s downtime (Perfect!)")
+    # Calcolo Downtime
+    # Cerchiamo errori DOPO il kill time e PRIMA che torni 200
+    errors_after_kill = [x for x in traffic_log if x['ts'] >= kill_time and x['status'] != 200]
+
+    result = {
+        "test_name": "fault_tolerance",
+        "victim_node": victim,
+        "downtime_seconds": 0,
+        "total_errors": len(errors_after_kill)
+    }
+
+    if errors_after_kill:
+        start_error = min(x['ts'] for x in errors_after_kill)
+        end_error = max(x['ts'] for x in errors_after_kill)
+        downtime = end_error - start_error
+        result["downtime_seconds"] = round(downtime, 2)
+        print(f"-> Downtime Detected: {downtime:.2f} seconds")
     else:
-        first_error = min(errors)
-        last_error = max(errors)
-        # Filtra errori avvenuti solo DOPO il kill command
-        relevant_errors = [e for e in errors if e >= kill_time]
-        if relevant_errors:
-            downtime = max(relevant_errors) - min(relevant_errors)
-            print(f"Result: {downtime:.4f} seconds of instability")
-        else:
-             print("Result: No relevant errors detected")
+        print("-> 0 Downtime (Seamless failover)")
+
+    with open("results_fault.json", "w") as f:
+        json.dump(result, f, indent=2)
+
 
 if __name__ == "__main__":
     test_fault_tolerance()

@@ -49,3 +49,43 @@ class SwarmDriver:
         res = self._run("docker system df --format '{{json .}}'")
         return res.stdout  # Da parsare
 
+    def get_cluster_stats(self):
+        """
+        Ritorna la somma di CPU e RAM usata da tutti i container.
+        Nota: Questo è un approccio 'best effort' usando docker stats sul manager.
+        In un cluster vero dovresti sommare le stats di tutti i nodi.
+        Per la tesi, se lanci i test dal manager, questo ti dà una stima locale o
+        puoi usare 'docker stats --no-stream' se hai accesso socket a tutti.
+        """
+        # Esegue docker stats una volta sola (--no-stream) e formatta in JSON
+        cmd = "docker stats --no-stream --format '{{.CPUPerc}} {{.MemUsage}}'"
+        res = self._run(cmd)
+
+        total_cpu = 0.0
+        total_mem_mb = 0.0
+
+        for line in res.stdout.strip().split('\n'):
+            if not line: continue
+            try:
+                parts = line.split()
+                # CPU: "0.50%" -> 0.50
+                cpu_str = parts[0].replace('%', '')
+                total_cpu += float(cpu_str)
+
+                # MEM: "20.5MiB / 100MiB" -> prendiamo 20.5MiB
+                mem_str = parts[1]  # "20.5MiB"
+                val_str = mem_str[:-3]  # "20.5"
+                unit = mem_str[-3:]  # "MiB"
+
+                val = float(val_str)
+                if unit == "GiB":
+                    val *= 1024
+                elif unit == "KiB":
+                    val /= 1024
+
+                total_mem_mb += val
+            except:
+                pass
+
+        return {"cpu_percent": total_cpu, "memory_mb": total_mem_mb}
+
