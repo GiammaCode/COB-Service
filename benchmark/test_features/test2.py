@@ -33,7 +33,6 @@ def run_test():
             shell=True)
 
         print("3. Avvio Client iperf3 (su un Worker)...")
-        # Nota: iperf3 con -J produce JSON
         subprocess.check_call(
             f"docker service create --name iperf-client --network {net_name} --constraint 'node.role==worker' networkstatic/iperf3 -c iperf-server -J",
             shell=True)
@@ -45,28 +44,38 @@ def run_test():
             time.sleep(1)
         print("\n")
 
-        # 3. Recupero logs dal client
+        # 3. Recupero logs INTELLIGENTE (Solo dal Task attivo)
         print("5. Recupero risultati...")
-        cmd = "docker service logs iperf-client --no-task-ids --raw"
+
+        # A. Troviamo l'ID del task che è effettivamente Running
         try:
+            # --format {{.ID}} ci dà solo l'ID del task (es. wq3i...)
+            task_cmd = "docker service ps iperf-client --filter desired-state=running --format '{{.ID}}'"
+            task_id = subprocess.check_output(task_cmd, shell=True).decode().strip().split('\n')[0]
+
+            if not task_id:
+                raise Exception("Nessun task running trovato")
+
+            print(f"   Targeting Task ID specifico: {task_id}")
+
+            # B. Prendiamo i log SOLO di quel task, evitando duplicati di vecchi container
+            cmd = f"docker service logs --raw {task_id}"
             output = subprocess.check_output(cmd, shell=True).decode()
-        except subprocess.CalledProcessError:
+
+        except Exception as e:
+            print(f"Errore recupero Task ID o Logs: {e}")
             output = ""
 
         gbps = 0
 
         if not output.strip():
-            print("ATTENZIONE: Output vuoto. Il container potrebbe essere crashato o pending.")
+            print("ATTENZIONE: Output vuoto.")
         else:
-            # FIX ROBUSTEZZA:
-            # I log potrebbero contenere output di riavvii precedenti (es. {...} {...}).
-            # Cerchiamo l'ULTIMA occorrenza di '{"start":' che indica l'inizio dell'ultimo report JSON.
+            # C. Parsing JSON con ricerca dell'ultima occorrenza valida
             json_start_index = output.rfind('{"start":')
 
             if json_start_index != -1:
-                # Prendiamo tutto dall'ultimo '{"start":' fino alla fine
                 clean_json_str = output[json_start_index:]
-
                 try:
                     iperf_data = json.loads(clean_json_str)
 
@@ -79,13 +88,13 @@ def run_test():
 
                 except json.JSONDecodeError as e:
                     print(f"ERRORE PARSING JSON: {e}")
-                    print("Suggerimento: L'output potrebbe essere tronco.")
+                    # Stampa una preview per capire cosa è arrivato
+                    print(f"DEBUG STR:\n{clean_json_str[:100]}...")
                     gbps = 0
             else:
-                print("IMPOSSIBILE TROVARE UN JSON 'START' VALIDO NEI LOG.")
-                # Stampa solo l'inizio e la fine per debug senza intasare tutto
-                print(f"Output Head:\n{output[:200]}...")
-                print(f"Output Tail:\n...{output[-200:]}")
+                print("IMPOSSIBILE TROVARE UN JSON 'START' VALIDO.")
+                # Stampa output per debug
+                print(f"Output Head:\n{output[:100]}...")
                 gbps = 0
 
     except subprocess.CalledProcessError as e:
