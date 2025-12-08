@@ -18,14 +18,23 @@ from drivers.swarm_driver import SwarmDriver
 def send_request(_):
     try:
         start = time.time()
-        resp = requests.get(config.API_URL, timeout=2)
+
+        # --- MODIFICA QUI ---
+        # Disabilita Keep-Alive usando una sessione usa-e-getta o l'header 'Connection: close'
+        with requests.Session() as s:
+            s.keep_alive = False
+            resp = s.get(config.API_URL, timeout=2)
+        # --------------------
+
         latency = time.time() - start
+
         return {
             "success": resp.status_code == 200,
             "latency": latency,
+            # Se resp.status_code è 200 ma il json fallisce, gestiamo l'eccezione
             "container": resp.json().get("container_id") if resp.status_code == 200 else None
         }
-    except:
+    except Exception as e:
         return {"success": False, "latency": 0, "container": None}
 
 
