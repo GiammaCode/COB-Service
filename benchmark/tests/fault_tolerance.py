@@ -1,3 +1,5 @@
+# docker service update --force cob-service_backend
+
 import time
 import requests
 import threading

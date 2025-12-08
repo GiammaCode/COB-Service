@@ -43,7 +43,33 @@ def test_scalability():
     for replicas in levels:
         print(f"\n[TEST] Scaling to {replicas} replicas...")
         driver.scale_service(config.SERVICE_NAME, replicas)
-        time.sleep(10)  # Wait stabilization
+
+        # --- SOSTITUISCI time.sleep(10) CON QUESTO BLOCCO ---
+        print(f"[TEST] Waiting for convergence...")
+        start_wait = time.time()
+        while True:
+            try:
+                # Controlliamo quanti container unici rispondono
+                unique_ids = set()
+                # Facciamo un po' di richieste veloci per sondare
+                for _ in range(replicas * 3 + 5):
+                    resp = requests.get(config.API_URL, timeout=1)
+                    if resp.status_code == 200:
+                        unique_ids.add(resp.json().get('container_id'))
+
+                # Se siamo scalati a 1, vogliamo vedere SOLO 1 ID.
+                # Se siamo scalati a 5, vogliamo vedere 5 ID.
+                if len(unique_ids) == replicas:
+                    print(f"Convergence reached: {len(unique_ids)} replicas active.")
+                    break
+            except:
+                pass
+
+            if time.time() - start_wait > 60:
+                print(
+                    f"[WARNING] Timeout waiting for convergence. Proceeding anyway with {len(unique_ids)} replicas...")
+                break
+            time.sleep(1)
 
         print(f"[TEST] Generating load (500 reqs)...")
         num_requests = 500
