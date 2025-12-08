@@ -12,7 +12,8 @@ class SwarmDriver:
     def scale_service(self, service_short_name, replicas):
         full_name = f"{self.stack_name}_{service_short_name}"
         print(f"[DRIVER] Scaling {full_name} to {replicas}..")
-        self._run(f"docker service scale {full_name}=={replicas}")
+        print(f"docker service scale {full_name}={replicas}")
+        self._run(f"docker service scale {full_name}={replicas}")
 
     def get_replica_count(self, service_short_name):
         full_name = f"{self.stack_name}_{service_short_name}"
