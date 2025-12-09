@@ -1,120 +1,128 @@
-#
 import time
-import requests
+import subprocess
 import sys
 import os
 import json
-import statistics
-from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
+import csv
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
+
 import config
 from drivers.swarm_driver import SwarmDriver
 
 
-def send_request(_):
+def run_locust_test(replicas, duration=30, users=50, spawn_rate=10):
+    print(f"[TEST] Starting Load Test with Locust (Replicas: {replicas})...")
+
+    # File temporaneo per i risultati CSV
+    csv_prefix = f"locust_res_{replicas}"
+
+    # Comando Locust:
+    # -f locustfile.py : il file con la definizione del task
+    # --headless : senza UI web
+    # -u {users} : numero utenti concorrenti
+    # -r {spawn_rate} : quanti utenti spawnare al secondo
+    # -t {duration}s : durata test
+    # --host : indirizzo target
+    # --csv : output su file
+    cmd = [
+        "locust",
+        "-f", os.path.join(parent_dir, "locustfile.py"),
+        "--headless",
+        "-u", str(users),
+        "-r", str(spawn_rate),
+        "-t", f"{duration}s",
+        "--host", config.API_URL.replace("/api", ""),  # Locust aggiunge i path relativi, passiamo la base
+        "--csv", csv_prefix
+    ]
+
+    # Eseguiamo Locust
     try:
-        start = time.time()
+        subprocess.run(cmd, check=True, cwd=parent_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError as e:
+        print(f"[ERROR] Locust failed: {e}")
+        return None
 
-        # --- MODIFICA QUI ---
-        # Disabilita Keep-Alive usando una sessione usa-e-getta o l'header 'Connection: close'
-        with requests.Session() as s:
-            s.keep_alive = False
-            resp = s.get(config.API_URL, timeout=2)
-        # --------------------
+    # Leggiamo il CSV generato (locust_res_{replicas}_stats.csv)
+    stats_file = os.path.join(parent_dir, f"{csv_prefix}_stats.csv")
+    result = {}
 
-        latency = time.time() - start
+    if os.path.exists(stats_file):
+        with open(stats_file, mode='r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row['Name'] == 'Aggregated':
+                    result = {
+                        "replicas": replicas,
+                        "requests": int(row['Request Count']),
+                        "failures": int(row['Failure Count']),
+                        "rps": float(row['Requests/s']),
+                        "avg_latency": float(row['Average Response Time']),
+                        "p95_latency": float(row['95%']),
+                        "p99_latency": float(row['99%'])
+                    }
+        # Pulizia file temp
+        os.remove(stats_file)
+        # Rimuovi anche _failures.csv ecc se creati
+        # os.remove(os.path.join(parent_dir, f"{csv_prefix}_failures.csv"))
 
-        return {
-            "success": resp.status_code == 200,
-            "latency": latency,
-            # Se resp.status_code è 200 ma il json fallisce, gestiamo l'eccezione
-            "container": resp.json().get("container_id") if resp.status_code == 200 else None
-        }
-    except Exception as e:
-        return {"success": False, "latency": 0, "container": None}
+    else:
+        print("[ERROR] Stats file not found!")
 
+    return result
 
 def test_scalability():
     driver = SwarmDriver(config.STACK_NAME)
-    levels = [1, 3, 5]  # Puoi aggiungere 10 se i nodi reggono
+
+    # Livelli di scalabilità da testare
+    levels = [1, 3, 5, 10]
 
     output = {
-        "test_name": "scalability_and_lb",
+        "test_name": "scalability_stress_test",
+        "description": "Stress test using Locust to find saturation point",
         "results": []
     }
-
-    print("--- Scalability & Load Balancing Test ---")
+    print("--- Scalability & Load Balancing Stress Test (Locust) ---")
 
     for replicas in levels:
-        print(f"\n[TEST] Scaling to {replicas} replicas...")
+        driver.reset_cluster()
+
         driver.scale_service(config.SERVICE_NAME, replicas)
 
         # --- SOSTITUISCI time.sleep(10) CON QUESTO BLOCCO ---
-        print(f"[TEST] Waiting for convergence...")
+        print(f"[TEST] Waiting for {replicas} replicas to be ready...")
+        start_wait = time.time()
+        time.sleep(5)  # Attesa tecnica Docker
+        max_wait = 60
         start_wait = time.time()
         while True:
-            try:
-                # Controlliamo quanti container unici rispondono
-                unique_ids = set()
-                # Facciamo un po' di richieste veloci per sondare
-                for _ in range(replicas * 3 + 5):
-                    resp = requests.get(config.API_URL, timeout=1)
-                    if resp.status_code == 200:
-                        unique_ids.add(resp.json().get('container_id'))
-
-                # Se siamo scalati a 1, vogliamo vedere SOLO 1 ID.
-                # Se siamo scalati a 5, vogliamo vedere 5 ID.
-                if len(unique_ids) == replicas:
-                    print(f"Convergence reached: {len(unique_ids)} replicas active.")
-                    break
-            except:
-                pass
-
-            if time.time() - start_wait > 60:
-                print(
-                    f"[WARNING] Timeout waiting for convergence. Proceeding anyway with {len(unique_ids)} replicas...")
+            current, desired = driver.get_replica_count(config.SERVICE_NAME)
+            if current == replicas:
+                print(f"[TEST] Convergence reached: {current}/{replicas}")
                 break
-            time.sleep(1)
+            if time.time() - start_wait > max_wait:
+                print("[WARNING] Timeout waiting for convergence.")
+                break
+            time.sleep(2)
 
-        print(f"[TEST] Generating load (500 reqs)...")
-        num_requests = 500
-        start_bench = time.time()
+        # Pausa extra per stabilizzazione applicativa (Flask avvio)
+        time.sleep(5)
 
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            data = list(executor.map(send_request, range(num_requests)))
+        # Parametri aggressivi: 100 utenti, spawn veloce
+        data = run_locust_test(replicas, duration=20, users=100, spawn_rate=20)
 
-        duration = time.time() - start_bench
+        if data:
+            print(f"-> Result: {data['rps']} RPS | {data['avg_latency']}ms avg latency")
+            output["results"].append(data)
 
-        # Analisi Dati
-        successful = [d for d in data if d['success']]
-        rps = len(successful) / duration
-        latencies = [d['latency'] for d in successful]
-        avg_lat = statistics.mean(latencies) if latencies else 0
-
-        # Load Balancing Check
-        containers = [d['container'] for d in successful if d['container']]
-        unique_containers = len(set(containers))
-        counts = Counter(containers).values()
-        std_dev_balance = statistics.stdev(counts) if len(counts) > 1 else 0
-
-        res = {
-            "replicas": replicas,
-            "throughput_rps": round(rps, 2),
-            "avg_latency_ms": round(avg_lat * 1000, 2),
-            "unique_responders": unique_containers,
-            "balance_std_dev": round(std_dev_balance, 2)
-        }
-        output["results"].append(res)
-
-        print(f"-> RPS: {rps:.2f} | Latency: {avg_lat * 1000:.2f}ms | Unique Containers: {unique_containers}")
-
-    os.makedirs("results", exist_ok=True)
-    with open("results/scalability_load_balancing.json", "w") as f:
-        json.dump(output, f, indent=2)
+        driver.reset_cluster()
+        os.makedirs("results", exist_ok=True)
+        outfile = "results/scalability_load_balancing.json"
+        with open(outfile, "w") as f:
+            json.dump(output, f, indent=2)
+        print(f"\n[TEST] Completed. Results saved to {outfile}")
 
 
 if __name__ == "__main__":
