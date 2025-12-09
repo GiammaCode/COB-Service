@@ -112,8 +112,8 @@ def test_scalability():
 
         print(f"-> RPS: {rps:.2f} | Latency: {avg_lat * 1000:.2f}ms | Unique Containers: {unique_containers}")
 
-    # Salva JSON
-    with open("results_scalability.json", "w") as f:
+    os.makedirs("results", exist_ok=True)
+    with open("results/scalability_load_balancing.json", "w") as f:
         json.dump(output, f, indent=2)
 
 

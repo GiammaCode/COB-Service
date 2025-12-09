@@ -43,8 +43,8 @@ def test_resource_overhead():
         "load_stats": load_stats,
         "overhead_per_container_mb": per_container
     }
-
-    with open("results_overhead.json", "w") as f:
+    os.makedirs("results", exist_ok=True)
+    with open("results/resource_overhead.json", "w") as f:
         json.dump(res, f, indent=2)
 
     # Cleanup

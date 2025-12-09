@@ -63,7 +63,8 @@ def test_rolling_update():
         "failed_reqs": errors
     }
 
-    with open("results_update.json", "w") as f:
+    os.makedirs("results", exist_ok=True)
+    with open("results/rolling_update.json", "w") as f:
         json.dump(res, f, indent=2)
 
 

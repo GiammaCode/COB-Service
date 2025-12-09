@@ -88,7 +88,8 @@ def test_fault_tolerance():
     else:
         print("-> 0 Downtime (Seamless failover)")
 
-    with open("results_fault.json", "w") as f:
+    os.makedirs("results", exist_ok=True)
+    with open("results/fault_tolerance.json", "w") as f:
         json.dump(result, f, indent=2)
 
 
