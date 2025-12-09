@@ -98,11 +98,16 @@ class SwarmDriver:
         Conta quanti task sono EFFETTIVAMENTE in stato 'Running'.
         Non si fida di 'docker service ls', guarda i singoli processi.
         """
-        # Filtriamo per 'current-state=running'
-        cmd = f"docker service ps {service_name} --filter desired-state=running --filter 'current-state=running' --format '{{{{.ID}}}}'"
+        cmd = f"docker service ls --filter name={service_name} --format '{{{{.Replicas}}}}'"
         res = self._run(cmd)
-        # Conta le righe non vuote
-        return len([line for line in res.stdout.strip().split('\n') if line])
+        try:
+            line = res.stdout.strip()
+            if "/" in line:
+                current, desired = line.split("/")
+                return int(current)
+            return 0
+        except:
+            return 0
 
     def reset_cluster(self, service_to_reset=["backend", "frontend"]):
         print("\n[DRIVER] --- RESETTING CLUSTER ---")
