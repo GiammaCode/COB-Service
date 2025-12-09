@@ -133,7 +133,7 @@ def test_scalability():
             print(f"[ERROR] No data collected for {replicas} replicas")
 
         # Reset tra un test e l'altro per pulire le risorse
-        driver.reset_cluster()
+        #driver.reset_cluster()
 
     # Salvataggio JSON finale
     os.makedirs("results", exist_ok=True)
