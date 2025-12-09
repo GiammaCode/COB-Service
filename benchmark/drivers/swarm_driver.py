@@ -38,17 +38,6 @@ class SwarmDriver:
         res = self._run("docker node ls --format '{{.Hostname}}' --filter role=worker")
         return res.stdout.strip().split('\n')
 
-    def stop_node_daemon(self, node_hostname):
-        """Simula il crash spegnendo il demone Docker via SSH"""
-        print(f"[DRIVER] ☠️  KILLING DOCKER ON {node_hostname}...")
-        # Nota: richiede sudo senza password o root
-        self._ssh_exec(node_hostname, "sudo systemctl stop docker")
-
-    def start_node_daemon(self, node_hostname):
-        """Ripristina il nodo"""
-        print(f"[DRIVER] 🚑 RESTORING DOCKER ON {node_hostname}...")
-        self._ssh_exec(node_hostname, "sudo systemctl start docker")
-
     def update_image(self, service_short_name, image):
         full_name = f"{self.stack_name}_{service_short_name}"
         print(f"[DRIVER] Updating {full_name} to image {image}..")

@@ -12,10 +12,8 @@ sys.path.append(parent_dir)
 import config
 from drivers.swarm_driver import SwarmDriver
 
-# Configurazione
 TEST_DURATION = 60  # Durata totale monitoraggio post-kill
 POLLING_INTERVAL = 0.1 # Frequenza richieste (10 req/s per alta precisione)
-MANUAL_MODE = False  # Metti True se SSH non funziona e vuoi spegnere a mano
 
 stop_traffic = False
 traffic_log = []
@@ -91,28 +89,20 @@ def test_fault_tolerance():
     time.sleep(10)
 
     # 3. KILL
-    print(f"\n[TEST] 🔥 EXECUTING HARD KILL ON {victim}...")
+    print(f"\n[TEST] EXECUTING HARD KILL ON {victim}...")
     kill_time = time.time()
     output["timeline_events"].append({"event": "kill_start", "time": kill_time})
 
-    if MANUAL_MODE:
-        input(f">>> AZIONE MANUALE: Spegni Docker su {victim} e premi INVIO <<<")
-    else:
-        driver.stop_node_daemon(victim)
-
+    input(f">>> AZIONE MANUALE: Spegni Docker su {victim} e premi INVIO <<<")
     print(f"[TEST] Node killed. Monitoring recovery for {TEST_DURATION}s...")
 
     # 4. MONITOR RECOVERY
     time.sleep(TEST_DURATION)
-
-    # 5. STOP & ANALYZE
     stop_traffic = True
     t.join()
 
     # 6. RESTORE NODE (Per pulizia futura)
     print(f"[TEST] Restoring node {victim} (cleanup)...")
-    if not MANUAL_MODE:
-        driver.start_node_daemon(victim)
 
     # --- ANALISI DATI ---
     # Convertiamo i log in CSV per debug
@@ -128,7 +118,7 @@ def test_fault_tolerance():
     failures_after_kill = [x for x in traffic_log if x['timestamp'] > kill_time and x['status'] != 200]
 
     if not failures_after_kill:
-        print("-> ⚠️ NO FAILURES DETECTED. Il sistema non ha risentito del kill (o il kill non ha funzionato).")
+        print("-> NO FAILURES DETECTED. Il sistema non ha risentito del kill (o il kill non ha funzionato).")
         rto = 0
     else:
         first_fail_ts = failures_after_kill[0]['timestamp']
