@@ -44,7 +44,7 @@ def run_locust_test(replicas, duration=30, users=50, spawn_rate=10):
 
     # Eseguiamo Locust
     try:
-        subprocess.run(cmd, check=True, cwd=parent_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(cmd, check=True, cwd=parent_dir, stdout=subprocess.DEVNULL)
     except subprocess.CalledProcessError as e:
         print(f"[ERROR] Locust failed: {e}")
         return None
