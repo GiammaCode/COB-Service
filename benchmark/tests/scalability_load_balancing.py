@@ -5,6 +5,7 @@ import os
 import json
 import csv
 
+# Setup path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
@@ -14,6 +15,9 @@ from drivers.swarm_driver import SwarmDriver
 
 
 def run_locust_test(replicas, duration=30, users=50, spawn_rate=10):
+    """
+    Esegue Locust in modalità headless e restituisce le statistiche.
+    """
     print(f"[TEST] Starting Load Test with Locust (Replicas: {replicas})...")
 
     # File temporaneo per i risultati CSV
@@ -73,27 +77,27 @@ def run_locust_test(replicas, duration=30, users=50, spawn_rate=10):
 
     return result
 
+
 def test_scalability():
     driver = SwarmDriver(config.STACK_NAME)
 
     # Livelli di scalabilità da testare
-    levels = [1, 3, 5, 10]
+    # Consiglio: spingi un po' di più se l'hardware regge (es. 10)
+    levels = [1, 3, 5]
 
     output = {
         "test_name": "scalability_stress_test",
         "description": "Stress test using Locust to find saturation point",
         "results": []
     }
+
     print("--- Scalability & Load Balancing Stress Test (Locust) ---")
 
     for replicas in levels:
-        driver.reset_cluster()
-
+        #driver.reset_cluster()
         driver.scale_service(config.SERVICE_NAME, replicas)
-
-        # --- SOSTITUISCI time.sleep(10) CON QUESTO BLOCCO ---
         print(f"[TEST] Waiting for {replicas} replicas to be ready...")
-        start_wait = time.time()
+        # Polling semplice per vedere se sono UP
         time.sleep(5)  # Attesa tecnica Docker
         max_wait = 60
         start_wait = time.time()
@@ -107,22 +111,21 @@ def test_scalability():
                 break
             time.sleep(2)
 
-        # Pausa extra per stabilizzazione applicativa (Flask avvio)
         time.sleep(5)
-
-        # Parametri aggressivi: 100 utenti, spawn veloce
         data = run_locust_test(replicas, duration=20, users=100, spawn_rate=20)
 
         if data:
             print(f"-> Result: {data['rps']} RPS | {data['avg_latency']}ms avg latency")
             output["results"].append(data)
 
-        driver.reset_cluster()
-        os.makedirs("results", exist_ok=True)
-        outfile = "results/scalability_load_balancing.json"
-        with open(outfile, "w") as f:
-            json.dump(output, f, indent=2)
-        print(f"\n[TEST] Completed. Results saved to {outfile}")
+
+    driver.reset_cluster()
+
+    os.makedirs("results", exist_ok=True)
+    outfile = "results/scalability_load_balancing.json"
+    with open(outfile, "w") as f:
+        json.dump(output, f, indent=2)
+    print(f"\n[TEST] Completed. Results saved to {outfile}")
 
 
 if __name__ == "__main__":
