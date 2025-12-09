@@ -11,6 +11,11 @@ class SwarmDriver:
     def _run(self, cmd):
         return subprocess.run(cmd, shell=True, capture_output=True, text=True)
 
+    def _ssh_exec(self, node, cmd):
+        ssh_cmd = f"ssh -o StrictHostKeyChecking=no {node} '{cmd}'"
+        print(f"[DRIVER-SSH] Executing on {node}: {cmd}")
+        return self._run(ssh_cmd)
+
     def scale_service(self, service_short_name, replicas):
         full_name = f"{self.stack_name}_{service_short_name}"
         print(f"[DRIVER] Scaling {full_name} to {replicas}..")
@@ -29,22 +34,25 @@ class SwarmDriver:
         except Exception as e:
             return 0, 0
 
+    def get_worker_nodes(self):
+        res = self._run("docker node ls --format '{{.Hostname}}' --filter role=worker")
+        return res.stdout.strip().split('\n')
+
+    def stop_node_daemon(self, node_hostname):
+        """Simula il crash spegnendo il demone Docker via SSH"""
+        print(f"[DRIVER] ☠️  KILLING DOCKER ON {node_hostname}...")
+        # Nota: richiede sudo senza password o root
+        self._ssh_exec(node_hostname, "sudo systemctl stop docker")
+
+    def start_node_daemon(self, node_hostname):
+        """Ripristina il nodo"""
+        print(f"[DRIVER] 🚑 RESTORING DOCKER ON {node_hostname}...")
+        self._ssh_exec(node_hostname, "sudo systemctl start docker")
+
     def update_image(self, service_short_name, image):
         full_name = f"{self.stack_name}_{service_short_name}"
         print(f"[DRIVER] Updating {full_name} to image {image}..")
         self._run(f"docker service update --image {image} --update-order start-first {full_name}")
-
-    def drain_node(self, node_hostname):
-        print(f"[DRIVER] Draining node {node_hostname}...")
-        self._run(f"docker node update --availability drain {node_hostname}")
-
-    def active_node(self, node_hostname):
-        print(f"[DRIVER] Activating node {node_hostname}...")
-        self._run(f"docker node update --availability active {node_hostname}")
-
-    def get_worker_nodes(self):
-        res = self._run("docker node ls --format '{{.Hostname}}' --filter role=worker")
-        return res.stdout.strip().split('\n')
 
     def get_cluster_stats(self):
         """
