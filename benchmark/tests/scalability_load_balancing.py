@@ -1,3 +1,4 @@
+#
 import time
 import requests
 import sys
@@ -6,7 +7,6 @@ import json
 import statistics
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
