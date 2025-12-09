@@ -1,12 +1,25 @@
 version: '3.8'
 
 services:
+  nginx:
+    image: 192.168.15.9:5000/cob-service-nginx:latest
+    ports:
+      - "80:80"
+    networks:
+      - cob-service
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+    depends_on:
+      - frontend
+      - backend
+
   frontend:
     image: 192.168.15.9:5000/cob-service-frontend:latest
-    ports:
-      - "3000:3000"
     environment:
-      - REACT_APP_API_URL=http://192.168.15.9:5001      # <--- Point to Manager IP, not localhost
+      - REACT_APP_API_URL=/api
     networks:
       - cob-service
     deploy:
@@ -23,8 +36,6 @@ services:
 
   backend:
     image: 192.168.15.9:5000/cob-service-backend:latest
-    ports:
-      - "5001:5000"
     environment:
       - MONGO_URI=mongodb://mongoadmin:secret@db:27017/submission_management_db?authSource=admin
       - FLASK_APP=app.py
@@ -33,13 +44,6 @@ services:
       - cob-service
     deploy:
       replicas: 3
-      #resources:
-      #  limits:
-      #    cpus: '0.5'
-      #    memory: 512M
-      #  reservations:
-      #    cpus: '0.25'
-      #    memory: 256M
       update_config:
         parallelism: 1
         delay: 10s
