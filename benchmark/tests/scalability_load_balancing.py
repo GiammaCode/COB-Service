@@ -112,7 +112,7 @@ def test_scalability():
             time.sleep(2)
 
         time.sleep(5)
-        data = run_locust_test(replicas, duration=20, users=100, spawn_rate=20)
+        data = run_locust_test(replicas, duration=20, users=500, spawn_rate=50)
 
         if data:
             print(f"-> Result: {data['rps']} RPS | {data['avg_latency']}ms avg latency")
