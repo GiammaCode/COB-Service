@@ -82,6 +82,28 @@ class SwarmDriver:
 
         return {"cpu_percent": total_cpu, "memory_mb": total_mem_mb}
 
+    def create_dummy_service(self, service_name, replicas):
+        """Crea un servizio leggero (Alpine) fuori dallo stack principale"""
+        print(f"[DRIVER] Creating dummy service {service_name} with {replicas} replicas...")
+        # Usiamo alpine con sleep infinity per avere overhead applicativo quasi nullo
+        cmd = f"docker service create --name {service_name} --replicas {replicas} alpine:latest sleep infinity"
+        self._run(cmd)
+
+    def remove_service(self, service_name):
+        print(f"[DRIVER] Removing service {service_name}...")
+        self._run(f"docker service rm {service_name}")
+
+    def count_running_tasks(self, service_name):
+        """
+        Conta quanti task sono EFFETTIVAMENTE in stato 'Running'.
+        Non si fida di 'docker service ls', guarda i singoli processi.
+        """
+        # Filtriamo per 'current-state=running'
+        cmd = f"docker service ps {service_name} --filter desired-state=running --filter 'current-state=running' --format '{{{{.ID}}}}'"
+        res = self._run(cmd)
+        # Conta le righe non vuote
+        return len([line for line in res.stdout.strip().split('\n') if line])
+
     def reset_cluster(self, service_to_reset=["backend", "frontend"]):
         print("\n[DRIVER] --- RESETTING CLUSTER ---")
 
