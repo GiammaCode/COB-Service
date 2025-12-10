@@ -151,8 +151,6 @@ def test_rolling_update():
     with open(outfile, "w") as f:
         json.dump(output, f, indent=2)
 
-    # Cleanup
-    driver.reset_cluster()
     print(f"\n[TEST] Completed. JSON saved to {outfile}")
 
 
