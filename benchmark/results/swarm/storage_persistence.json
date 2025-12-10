@@ -1,0 +1,18 @@
+{
+  "test_name": "storage_persistence_nfs",
+  "description": "Verifies data persistence when DB moves between nodes using NFS",
+  "steps": [
+    {
+      "action": "write",
+      "node": "gianmaria-Standard-PC-i440FX-PIIX-1996",
+      "status": "success"
+    },
+    {
+      "action": "migrate",
+      "from": "gianmaria-Standard-PC-i440FX-PIIX-1996",
+      "to": "casamenti-Standard-PC-i440FX-PIIX-1996",
+      "status": "success"
+    }
+  ],
+  "result": "PASSED"
+}
