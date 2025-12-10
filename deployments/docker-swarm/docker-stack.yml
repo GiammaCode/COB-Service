@@ -66,11 +66,10 @@ services:
       - mongo_data:/data/db
     deploy:
       replicas: 1
-      placement:
-        constraints:
-          - node.role == manager  # keeps DB on swarm09 for data persistence
       restart_policy:
         condition: on-failure
+        delay: 5s
+        max_attempts: 3
 
 networks:
   cob-service:
@@ -78,5 +77,9 @@ networks:
     attachable: true
 
 volumes:
-  mongo_data:
+  mongo_nfs_data:
     driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=192.168.15.9,rw"
+      device: ":/srv/nfs/mongo_shared_data"
