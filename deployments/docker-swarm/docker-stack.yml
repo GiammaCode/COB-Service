@@ -63,7 +63,7 @@ services:
     networks:
       - cob-service
     volumes:
-      - mongo_data:/data/db
+      - mongo_nfs_data:/data/db
     deploy:
       replicas: 1
       restart_policy:
