@@ -17,7 +17,7 @@ from drivers.swarm_driver import SwarmDriver
 # Configurazione
 STOP_TRAFFIC = False
 TRAFFIC_LOG = []
-POLLING_INTERVAL = 0.1  # 10 req/s circa per monitorare la continuità
+POLLING_INTERVAL = 0.1
 
 
 def traffic_generator():
@@ -25,7 +25,6 @@ def traffic_generator():
     global STOP_TRAFFIC, TRAFFIC_LOG
     print("[TRAFFIC] Generator started...")
 
-    # Sessione riutilizzabile per efficienza
     s = requests.Session()
 
     while not STOP_TRAFFIC:
@@ -33,11 +32,10 @@ def traffic_generator():
         status = 0
         error_msg = ""
         try:
-            # Timeout breve: in un rolling update non vogliamo code infinite
             resp = s.get(config.API_URL + "/assignments", timeout=1)
             status = resp.status_code
         except Exception as e:
-            status = -1  # Connection Error
+            status = -1
             error_msg = str(e)
 
         TRAFFIC_LOG.append({
@@ -46,6 +44,22 @@ def traffic_generator():
             "error": error_msg
         })
         time.sleep(POLLING_INTERVAL)
+
+
+def wait_for_http_ready(url, timeout=60):
+    """Attende che l'URL risponda 200 OK"""
+    print(f"[TEST] Waiting for HTTP 200 OK from {url}...")
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            if requests.get(url, timeout=1).status_code == 200:
+                print("[TEST] Service is READY! 🟢")
+                return True
+        except:
+            pass
+        time.sleep(1)
+    print("[TEST] Service NOT READY (Timeout) 🔴")
+    return False
 
 
 def test_rolling_update():
@@ -67,15 +81,22 @@ def test_rolling_update():
     replicas = 3
     driver.scale_service(config.SERVICE_NAME, replicas)
 
-    print(f"[TEST] Waiting for convergence ({replicas} replicas)...")
-    time.sleep(10)  # Attesa tecnica
+    print(f"[TEST] Waiting for infrastructure ({replicas} replicas)...")
 
-    # Verifica convergenza
+    # Attesa convergenza Docker
     while True:
         curr, des = driver.get_replica_count(config.SERVICE_NAME)
         if curr == replicas:
             break
         time.sleep(2)
+
+    # --- FIX: ATTESA LIVELLO APPLICATIVO (HTTP) ---
+    # Non partiamo finché NGINX + Backend non si parlano
+    if not wait_for_http_ready(config.API_URL + "/assignments"):
+        print("[CRITICAL] Il cluster non risponde. Test abortito.")
+        driver.reset_cluster()
+        return
+    # ----------------------------------------------
 
     # 2. START TRAFFIC
     t = threading.Thread(target=traffic_generator)
@@ -85,25 +106,17 @@ def test_rolling_update():
     time.sleep(5)
 
     # 3. TRIGGER UPDATE
-    # Usiamo --force per garantire che l'update avvenga anche se l'immagine è identica.
-    # --update-order start-first è CRUCIALE per il zero-downtime (accendi il nuovo prima di spegnere il vecchio)
     full_service_name = f"{config.STACK_NAME}_{config.SERVICE_NAME}"
+    # Aggiornamento lento (10s delay) per vedere bene il transitorio
     update_cmd = f"docker service update --force --update-order start-first --update-delay 10s {full_service_name}"
 
     print(f"[TEST] 🚀 Triggering Rolling Update (Start-First)...")
     update_start_time = time.time()
 
-    # Eseguiamo il comando manualmente tramite il driver interno per avere il flag --force
     driver._run(update_cmd)
 
     # 4. MONITOR UPDATE
-    # Attendiamo che l'update finisca.
-    # Swarm impiegherà: (Delay 10s * Repliche) + Tempo di avvio container
-    print("[TEST] Monitor update progress...")
-
-    # Semplice attesa basata sul calcolo teorico + buffer
-    # 3 repliche * 10s delay = 30s minimo. Facciamo 45s per sicurezza.
-    # In una tesi potresti fare polling su "docker service ps" per vedere quando tutti sono "Running" da pochi secondi.
+    # Attesa fissa abbondante per coprire tutto il rolling
     time.sleep(45)
 
     update_end_time = time.time()
@@ -116,11 +129,10 @@ def test_rolling_update():
 
     # 6. ANALISI
     total_reqs = len(TRAFFIC_LOG)
-    # Consideriamo errori tutto ciò che non è 200 (inclusi 500, 502, 503, timeout)
     errors = [x for x in TRAFFIC_LOG if x['status'] != 200]
     total_errors = len(errors)
 
-    # Filtriamo errori SOLO durante la finestra di update
+    # Errori solo DURANTE l'update (escludiamo eventuali errori iniziali di warmup se sfuggiti)
     update_errors = [x for x in errors if x['timestamp'] >= update_start_time and x['timestamp'] <= update_end_time]
 
     success_rate = ((total_reqs - total_errors) / total_reqs) * 100 if total_reqs > 0 else 0
@@ -138,7 +150,7 @@ def test_rolling_update():
         "errors_during_update": len(update_errors)
     }
 
-    # Salvataggio CSV Log per grafici
+    # Salvataggio CSV Log
     csv_path = "results/rolling_update_log.csv"
     os.makedirs("results", exist_ok=True)
     with open(csv_path, "w", newline="") as f:
@@ -151,6 +163,7 @@ def test_rolling_update():
     with open(outfile, "w") as f:
         json.dump(output, f, indent=2)
 
+    driver.reset_cluster()
     print(f"\n[TEST] Completed. JSON saved to {outfile}")
 
 
