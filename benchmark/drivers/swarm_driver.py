@@ -131,7 +131,7 @@ class SwarmDriver:
                 break
             time.sleep(2)
 
-        print("[DRIVER] Cluster clean. Cooling down (10s)...")
-        time.sleep(10)
+        print("[DRIVER] Cluster clean. Cooling down (5s)...")
+        time.sleep(5)
         print("[DRIVER] Ready \n")
 

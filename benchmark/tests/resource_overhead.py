@@ -99,8 +99,8 @@ def test_resource_overhead():
             time.sleep(5)
 
         # 3. MISURAZIONE
-        print("[TEST] Monitoring 'dockerd' resources (20s)...")
-        stats = monitor_resources(duration_sec=20)
+        print("[TEST] Monitoring 'dockerd' resources (10s)...")
+        stats = monitor_resources()
 
         if stats:
             print(f"-> Result: CPU {stats['avg_cpu_percent']}% | RAM {stats['avg_ram_mb']} MB")
@@ -109,8 +109,6 @@ def test_resource_overhead():
                 "dockerd_stats": stats
             })
 
-    # Cleanup finale
-    driver.reset_cluster()
 
     os.makedirs("results", exist_ok=True)
     outfile = "results/resource_overhead.json"
