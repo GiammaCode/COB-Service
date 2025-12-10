@@ -53,12 +53,12 @@ def wait_for_http_ready(url, timeout=60):
     while time.time() - start < timeout:
         try:
             if requests.get(url, timeout=1).status_code == 200:
-                print("[TEST] Service is READY! 🟢")
+                print("[TEST] Service is READY! ")
                 return True
         except:
             pass
         time.sleep(1)
-    print("[TEST] Service NOT READY (Timeout) 🔴")
+    print("[TEST] Service NOT READY (Timeout) ")
     return False
 
 
@@ -110,7 +110,7 @@ def test_rolling_update():
     # Aggiornamento lento (10s delay) per vedere bene il transitorio
     update_cmd = f"docker service update --force --update-order start-first --update-delay 10s {full_service_name}"
 
-    print(f"[TEST] 🚀 Triggering Rolling Update (Start-First)...")
+    print(f"[TEST] Triggering Rolling Update (Start-First)...")
     update_start_time = time.time()
 
     driver._run(update_cmd)
@@ -163,7 +163,6 @@ def test_rolling_update():
     with open(outfile, "w") as f:
         json.dump(output, f, indent=2)
 
-    driver.reset_cluster()
     print(f"\n[TEST] Completed. JSON saved to {outfile}")
 
 
