@@ -3,3 +3,4 @@ pandas
 locust
 matplotlib
 psutil
+pymongo
