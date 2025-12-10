@@ -1,0 +1,33 @@
+{
+  "test_name": "scalability_stress_test",
+  "description": "Stress test using Locust to find saturation point",
+  "results": [
+    {
+      "replicas": 1,
+      "requests": 16966,
+      "failures": 1553,
+      "rps": 889.8931788212848,
+      "avg_latency": 293.3911506731729,
+      "p95_latency": 1200.0,
+      "p99_latency": 2700.0
+    },
+    {
+      "replicas": 3,
+      "requests": 12017,
+      "failures": 0,
+      "rps": 631.650543556729,
+      "avg_latency": 380.58707433394557,
+      "p95_latency": 440.0,
+      "p99_latency": 2600.0
+    },
+    {
+      "replicas": 5,
+      "requests": 20132,
+      "failures": 0,
+      "rps": 1051.0776739815178,
+      "avg_latency": 256.09718897416735,
+      "p95_latency": 710.0,
+      "p99_latency": 750.0
+    }
+  ]
+}

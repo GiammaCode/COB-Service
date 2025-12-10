@@ -1,0 +1,27 @@
+{
+  "test_name": "control_plane_overhead_real_app",
+  "description": "Resource consumption of 'dockerd' with REAL Backend containers",
+  "results": [
+    {
+      "container_count": 0,
+      "dockerd_stats": {
+        "avg_cpu_percent": 0.6,
+        "avg_ram_mb": 172.33
+      }
+    },
+    {
+      "container_count": 50,
+      "dockerd_stats": {
+        "avg_cpu_percent": 1.8,
+        "avg_ram_mb": 190.53
+      }
+    },
+    {
+      "container_count": 100,
+      "dockerd_stats": {
+        "avg_cpu_percent": 1.9,
+        "avg_ram_mb": 195.11
+      }
+    }
+  ]
+}

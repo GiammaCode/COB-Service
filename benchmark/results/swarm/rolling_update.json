@@ -1,0 +1,12 @@
+{
+  "test_name": "rolling_update_zero_downtime",
+  "description": "Verifies service availability during a forced rolling update (start-first)",
+  "replicas": 3,
+  "results": {
+    "duration_seconds": 71.85,
+    "total_requests": 710,
+    "failed_requests": 6,
+    "success_rate_percent": 99.15,
+    "errors_during_update": 6
+  }
+}

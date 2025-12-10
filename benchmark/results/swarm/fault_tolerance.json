@@ -1,0 +1,14 @@
+{
+  "test_name": "fault_tolerance_hard_kill",
+  "victim_node": "giamma-Standard-PC-i440FX-PIIX-1996",
+  "rto_seconds": 21.29,
+  "total_failures": 10,
+  "timeline_events": [
+    {
+      "event": "kill_start",
+      "time": 1765297586.077919
+    }
+  ],
+  "first_fail_ts": 1765297594.9694338,
+  "last_fail_ts": 1765297616.2634919
+}
