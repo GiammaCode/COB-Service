@@ -12,9 +12,10 @@ spec:
     storage: 10Gi
   accessModes:
     - ReadWriteMany
+  storageClassName: ""  # <--- FONDAMENTALE: Disabilita classi automatiche
   nfs:
-    server: 192.168.15.9        # IP del tuo server NFS (il Manager)
-    path: /srv/nfs/mongo_shared_data  # Path esatto usato in Swarm
+    server: 192.168.15.9
+    path: /srv/nfs/mongo_shared_data
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -24,6 +25,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany
+  storageClassName: ""  # <--- FONDAMENTALE: Deve combaciare col PV
   resources:
     requests:
       storage: 5Gi
