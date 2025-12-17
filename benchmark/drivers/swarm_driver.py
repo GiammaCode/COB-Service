@@ -109,7 +109,7 @@ class SwarmDriver:
         except:
             return 0
 
-    def reset_cluster(self, service_to_reset=["backend", "frontend"]):
+    def reset_cluster(self, service_to_reset=["backend.yml", "frontend"]):
         print("\n[DRIVER] --- RESETTING CLUSTER ---")
 
         for svc in service_to_reset:

@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: cob-service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: 192.168.15.9:5000/cob-service-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+          env:
+            - name: MONGO_URI
+              value: "mongodb://mongoadmin:secret@db.cob-service.svc.cluster.local:27017/submission_management_db?authSource=admin"
+            - name: FLASK_APP
+              value: "app.py"
+            - name: FLASK_RUN_HOST
+              value: "0.0.0.0"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: cob-service
+spec:
+  selector:
+    app: backend
+  ports:
+    - protocol: TCP
+      port: 5000
+      targetPort: 5000

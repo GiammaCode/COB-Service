@@ -90,7 +90,7 @@ def test_resource_overhead():
                     break
                 time.sleep(2)
 
-            print(f"[TEST] {count} backend containers running.")
+            print(f"[TEST] {count} backend.yml containers running.")
             # Pausa più lunga per far stabilizzare i processi Python che partono
             print("[TEST] Stabilizing (10s)...")
             time.sleep(10)
