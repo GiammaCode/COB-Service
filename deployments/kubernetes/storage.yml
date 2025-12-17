@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cob-service
+
+---
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongo-nfs-pv
+spec:
+  capacity:
+      storage: 10Gi
+  accessModels:
+    - ReadWriteMany
+  nfs:
+    server: 192.168.15.9
+    path: /srv/nfs/mongo_shared_data
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-pvc
+  namespace: cob-service
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
