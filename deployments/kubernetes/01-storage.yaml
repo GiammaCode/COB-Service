@@ -2,24 +2,20 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: cob-service
-
 ---
-
 apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: mongo-nfs-pv
 spec:
   capacity:
-      storage: 10Gi
-  accessModels:
+    storage: 10Gi
+  accessModes:
     - ReadWriteMany
   nfs:
-    server: 192.168.15.9
-    path: /srv/nfs/mongo_shared_data
-
+    server: 192.168.15.9        # IP del tuo server NFS (il Manager)
+    path: /srv/nfs/mongo_shared_data  # Path esatto usato in Swarm
 ---
-
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

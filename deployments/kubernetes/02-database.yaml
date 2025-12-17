@@ -34,7 +34,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: db  # Questo nome DNS sarà usato dal backend.yaml
+  name: db  # Questo nome DNS sarà usato dal 03-backend.yaml
   namespace: cob-service
 spec:
   selector:
