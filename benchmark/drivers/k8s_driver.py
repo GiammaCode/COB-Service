@@ -96,7 +96,7 @@ class K8sDriver:
        cmd = f"kubectl rollout restart deployment/{service_name} -n {self.namespace}"
        self._run(cmd)
 
-    def get_nodes_with_podes(self, service_name):
+    def get_nodes_with_pods(self, service_name):
         """
         Returns a list of node names where the pods of the given service are currently running.
         Useful to identify a valid 'victim' node for fault tolerance tests.
