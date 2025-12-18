@@ -5,28 +5,38 @@ import os
 import json
 import csv
 
-# Setup path
+# --- Setup Paths ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
+# --- Local Imports ---
 import config
-#from drivers.swarm_driver import SwarmDriver
 from drivers.k8s_driver import K8sDriver
 
-def run_locust_test(replicas, duration=30, users=50, spawn_rate=10):
+# --- Constants ---
+LOCUST_USERS = 500
+LOCUST_SPAWN_RATE = 50
+TEST_DURATION = 30
+CONVERGENCE_TIMEOUT = 120  # Seconds to wait for pods to be ready
+STABILIZATION_TIME = 5  # Seconds to wait after convergence
+
+
+def run_locust_test(replicas, duration=TEST_DURATION, users=LOCUST_USERS, spawn_rate=LOCUST_SPAWN_RATE):
     """
-    Run locust test e return CSV raw data
+    Executes a Locust load test in headless mode.
     """
     print(f"[TEST] Starting Load Test with Locust (Replicas: {replicas})...")
+
+    # Setup results directory
     results_dir = os.path.join(parent_dir, "results")
     csv_dir = os.path.join(results_dir, "csv_raw")
     os.makedirs(csv_dir, exist_ok=True)
+
+    # Define CSV prefix for Locust output
     csv_prefix = os.path.join(csv_dir, f"locust_rep_{replicas}")
 
-    host_url = config.API_URL
-
-    # Comando Locust
+    host_url = config.API_URL.replace("/api", "")
     cmd = [
         "locust",
         "-f", os.path.join(parent_dir, "locustfile.py"),
@@ -39,11 +49,13 @@ def run_locust_test(replicas, duration=30, users=50, spawn_rate=10):
     ]
 
     try:
+        # Run Locust and suppress standard output to keep console clean
         subprocess.run(cmd, check=False, cwd=parent_dir, stdout=subprocess.DEVNULL)
     except Exception as e:
         print(f"[CRITICAL ERROR] Locust failed to start: {e}")
         return None
 
+    # Parse the generated stats file
     stats_file = f"{csv_prefix}_stats.csv"
     result = {}
 
@@ -52,6 +64,7 @@ def run_locust_test(replicas, duration=30, users=50, spawn_rate=10):
             with open(stats_file, mode='r') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
+                    # We are interested in the 'Aggregated' row for total stats
                     if row['Name'] == 'Aggregated':
                         result = {
                             "replicas": replicas,
@@ -63,7 +76,7 @@ def run_locust_test(replicas, duration=30, users=50, spawn_rate=10):
                             "p99_latency": float(row['99%'])
                         }
         except Exception as e:
-            print(f"[ERROR] Reading CSV: {e}")
+            print(f"[ERROR] Failed reading CSV: {e}")
             return None
         print(f"-> CSV saved to: {stats_file}")
     else:
@@ -74,44 +87,50 @@ def run_locust_test(replicas, duration=30, users=50, spawn_rate=10):
 
 
 def test_scalability():
-    #driver = SwarmDriver(config.STACK_NAME)
+    """
+    Main Scalability Test Loop.
+    Scales the backend to [1, 3, 5] replicas and runs a load test for each level.
+    """
     driver = K8sDriver()
-
     levels = [1, 3, 5]
 
     output = {
-        "test_name": "scalability_stress_test",
-        "description": "Stress test using Locust to find saturation point",
+        "test_name": "scalability_stress_test_k8s",
+        "description": "Stress test using Locust on Kubernetes to measure throughput vs replicas",
         "results": []
     }
 
-    print("--- Scalability & Load Balancing Stress Test (Locust) ---")
+    print("--- Scalability & Load Balancing Stress Test (K8s) ---")
 
-    # Reset iniziale per pulizia
+    # Reset cluster to a clean state
     driver.reset_cluster()
 
     for replicas in levels:
-        service_name = "backend"
+        service_name = config.SERVICE_NAME  # Usually 'backend'
+
         driver.scale_service(service_name, replicas)
 
         print(f"[TEST] Waiting for {replicas} replicas to be ready...")
-        time.sleep(2)
-        max_wait = 120
+        time.sleep(2)  # Allow K8s API to update status
+
+        # Wait for convergence
         start_wait = time.time()
         while True:
             current, desired = driver.get_replica_count(service_name)
             if current == replicas and desired == replicas:
                 print(f"[TEST] Convergence reached: {current}/{replicas}")
                 break
-            if time.time() - start_wait > max_wait:
-                print(f"[WARNING] Timeout waiting for convergence ({current}/{replicas}).")
+
+            if time.time() - start_wait > CONVERGENCE_TIMEOUT:
+                print(f"[WARNING] Timeout waiting for convergence ({current}/{replicas}). proceeding anyway...")
                 break
             time.sleep(2)
 
-        print("[TEST] Stabilizing (5s)...")
-        time.sleep(5)
+        print(f"[TEST] Stabilizing for {STABILIZATION_TIME}s...")
+        time.sleep(STABILIZATION_TIME)
 
-        data = run_locust_test(replicas, duration=20, users=500, spawn_rate=50)
+        # Run the actual load test
+        data = run_locust_test(replicas)
 
         if data:
             print(f"-> Result: {data['rps']} RPS | {data['avg_latency']}ms avg | Failures: {data['failures']}")
@@ -119,13 +138,13 @@ def test_scalability():
         else:
             print(f"[ERROR] No data collected for {replicas} replicas")
 
+    # Save Results
     os.makedirs("results", exist_ok=True)
-    outfile = "results/scalability_load_balancing.json"
+    outfile = "results/scalability_load_balancing_k8s.json"
     with open(outfile, "w") as f:
         json.dump(output, f, indent=2)
 
     print(f"\n[TEST] Completed. JSON saved to {outfile}")
-    print(f"[TEST] Raw CSVs saved in results/csv_raw/")
 
 
 if __name__ == "__main__":
