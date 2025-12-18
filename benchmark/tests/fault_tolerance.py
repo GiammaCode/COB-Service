@@ -6,33 +6,47 @@ import os
 import json
 import csv
 
+# --- Setup Paths ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
+
+# --- Local Imports ---
 import config
-from drivers.swarm_driver import SwarmDriver
+#from drivers.swarm_driver import SwarmDriver
+from drivers.k8s_driver import K8sDriver
 
-TEST_DURATION = 60  # Durata totale monitoraggio post-kill
-POLLING_INTERVAL = 0.1 # Frequenza richieste (10 req/s per alta precisione)
+# --- Constants ---
+TEST_DURATION = 90      # Duration of monitoring after the kill (seconds)
+POLLING_INTERVAL = 0.1  # Request frequency (10 req/s for high precision RTO)
+REPLICAS = 6            # High replica count to ensure spread across nodes
 
+# Globals
 stop_traffic = False
 traffic_log = []
 
 def traffic_generator():
-    """Genera traffico sequenziale e logga ogni singola richiesta"""
-    global stop_traffic
+    """
+    Generates sequential traffic to measure availability.
+    Logs every request to calculate RTO (Recovery Time Objective).
+    """
+    global stop_traffic, traffic_log
     print("[TRAFFIC] Generator started...")
 
-    # Sessione per performance, ma disabilitiamo keep-alive per testare il routing reale
     s = requests.Session()
+    # We disable keep-alive to test fresh routing for every request,
+    # ensuring we hit the load balancer logic properly.
+    s.keep_alive = False
+
+    base_url = config.API_URL
 
     while not stop_traffic:
         ts = time.time()
         status = 0
         error_msg = ""
         try:
-            # Timeout molto breve: se il nodo è morto, vogliamo fallire subito
-            resp = s.get(config.API_URL + "/assignments", timeout=0.5)
+            # Very short timeout: if a node is dead, we want to fail fast
+            resp = s.get(f"{base_url}/assignments", timeout=0.5)
             status = resp.status_code
         except Exception as e:
             status = -1  # Connection Error / Timeout
@@ -47,10 +61,11 @@ def traffic_generator():
 
 def test_fault_tolerance():
     global stop_traffic
-    driver = SwarmDriver(config.STACK_NAME)
+    driver = K8sDriver()
 
     output = {
-        "test_name": "fault_tolerance_hard_kill",
+        "test_name": "fault_tolerance_hard_kill_k8s",
+        "description": "Measures RTO (Recovery Time Objective) after a node hard power-off",
         "victim_node": None,
         "rto_seconds": 0,
         "total_failures": 0,
@@ -59,76 +74,91 @@ def test_fault_tolerance():
 
     print("--- Fault Tolerance Test (Hard Kill) ---")
 
-    # 1. SETUP
+
     driver.reset_cluster()
 
-    # Usiamo 6 repliche per essere sicuri di avere target sul nodo vittima
-    target_replicas = 6
-    driver.scale_service(config.SERVICE_NAME, target_replicas)
+    service_name = config.SERVICE_NAME  # 'backend'
 
-    print(f"[TEST] Waiting for convergence ({target_replicas} replicas)...")
-    time.sleep(15)
+    # Scale to many replicas to guarantee they land on the victim node too
+    print(f"[TEST] Scaling to {REPLICAS} replicas to ensure cluster spread...")
+    driver.scale_service(service_name, REPLICAS)
 
-    # Identifica vittima
-    workers = driver.get_worker_nodes()
-    if not workers:
-        print("[ERROR] No worker nodes found! Is the cluster running?")
+    print(f"[TEST] Waiting for convergence...")
+    time.sleep(10)  # Simple wait for K8s
+
+    # Identify a valid victim (a node that is actually running backend pods)
+    active_nodes = driver.get_nodes_with_pods(service_name)
+
+    if not active_nodes:
+        print("[ERROR] No active nodes found for the service.")
         return
 
-    # Scegliamo il primo worker disponibile
-    victim = workers[0]
-    print(f"[TEST] Target Victim: {victim}")
+    victim = active_nodes[0]
+    print(f"[TEST] Target Victim identified: {victim}")
     output["victim_node"] = victim
 
-    # 2. START TRAFFIC
+    # START TRAFFIC
     t = threading.Thread(target=traffic_generator)
     t.start()
 
-    # Lascia girare il traffico per un po' per avere una baseline
-    print("[TEST] Baseline traffic (10s)...")
+    # Baseline traffic
+    print("[TEST] Recording baseline traffic (10s)...")
     time.sleep(10)
 
-    # 3. KILL
-    print(f"\n[TEST] EXECUTING HARD KILL ON {victim}...")
+    # KILL
+    print(f"\n" + "=" * 50)
+    print(f" >>> ACTION REQUIRED <<<")
+    print(f" 1. Go to Proxmox Interface")
+    print(f" 2. Locate VM: {victim}")
+    print(f" 3. Right Click -> STOP (Hard Shutdown)")
+    print(f" 4. IMMEDIATELY press ENTER here once clicked.")
+    print(f"=" * 50 + "\n")
+
     kill_time = time.time()
-    output["timeline_events"].append({"event": "kill_start", "time": kill_time})
+    input(f"Press ENTER when {victim} is shutting down...")
 
-    input(f">>> AZIONE MANUALE: Spegni Docker su {victim} e premi INVIO <<<")
-    print(f"[TEST] Node killed. Monitoring recovery for {TEST_DURATION}s...")
+    # Update kill time to be closer to actual user action if they delayed
+    # (We assume the user presses enter right after clicking)
+    kill_time = time.time()
+    output["timeline_events"].append({"event": "kill_confirmed", "time": kill_time})
 
-    # 4. MONITOR RECOVERY
+    print(f"[TEST] Node kill confirmed. Monitoring recovery for {TEST_DURATION}s...")
+
+    # MONITOR RECOVERY
     time.sleep(TEST_DURATION)
     stop_traffic = True
     t.join()
 
-    # 6. RESTORE NODE (Per pulizia futura)
-    print(f"[TEST] Restoring node {victim} (cleanup)...")
+    # CLEANUP REMINDER
+    print(f"\n[IMPORTANT] Test finished. Remember to START node {victim} again in Proxmox!")
 
-    # --- ANALISI DATI ---
-    # Convertiamo i log in CSV per debug
-    csv_path = "results/fault_tolerance_log.csv"
+    # save raw data
+    csv_path = "results/fault_tolerance_log_k8s.csv"
     os.makedirs("results", exist_ok=True)
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["timestamp", "status", "error"])
         writer.writeheader()
         writer.writerows(traffic_log)
 
-    # Calcolo RTO
-    # Cerchiamo il primo fallimento dopo il kill
+    # Calculate RTO
+    # We look for the first failure AFTER the kill confirmation
     failures_after_kill = [x for x in traffic_log if x['timestamp'] > kill_time and x['status'] != 200]
 
     if not failures_after_kill:
-        print("-> NO FAILURES DETECTED. Il sistema non ha risentito del kill (o il kill non ha funzionato).")
+        print("\n-> RESULT: NO FAILURES DETECTED.")
+        print("   Possibilities:")
+        print("   1. The load balancer instantly routed away (Excellent).")
+        print("   2. You killed a node that had no active traffic at that specific millisecond.")
         rto = 0
     else:
         first_fail_ts = failures_after_kill[0]['timestamp']
-
-        # Cerchiamo quando il sistema è tornato stabile (es. ultimi 10 successi consecutivi)
-        # Semplificazione: prendiamo l'ultimo timestamp di errore e calcoliamo la differenza dal primo
         last_fail_ts = failures_after_kill[-1]['timestamp']
 
-        # RTO grezzo: Tempo dall'inizio dei problemi alla fine dei problemi
+        # RTO = Time between first error and last error
         rto = last_fail_ts - first_fail_ts
+
+        # If RTO is very small (< 1s), it might be just a glitch.
+        # If it's large (~60s), it's the K8s Node Monitor Grace Period.
 
         total_errors = len(failures_after_kill)
 
@@ -137,13 +167,13 @@ def test_fault_tolerance():
         output["first_fail_ts"] = first_fail_ts
         output["last_fail_ts"] = last_fail_ts
 
-        print(f"\n-> RISULTATI:")
+        print(f"\n-> RESULTS:")
         print(f"   Failures detected: {total_errors}")
         print(f"   Estimated RTO: {rto:.2f} seconds")
-        print(f"   (Dettagli nel file CSV: {csv_path})")
+        print(f"   (See {csv_path} for details)")
 
-    # Salvataggio JSON
-    outfile = "results/fault_tolerance.json"
+    # Save JSON
+    outfile = "results/fault_tolerance_k8s.json"
     with open(outfile, "w") as f:
         json.dump(output, f, indent=2)
 

@@ -95,3 +95,19 @@ class K8sDriver:
        # rollout restart forza la ricreazione dei pod mantenendo il servizio attivo
        cmd = f"kubectl rollout restart deployment/{service_name} -n {self.namespace}"
        self._run(cmd)
+
+    def get_nodes_with_podes(self, service_name):
+        """
+        Returns a list of node names where the pods of the given service are currently running.
+        Useful to identify a valid 'victim' node for fault tolerance tests.
+        """
+        cmd = f"kubectl get pods -n {self.namespace} -l app={service_name}-o jsonpath='{{.items[*].spec.nodeName}}'"
+        res = self._run(cmd)
+
+        if res.returncode != 0:
+            print(f"[ERROR] Could not get pod nodes: {res.stderr}")
+            return []
+
+        # .split() separates the names, set() removes duplicates, list() converts back to list
+        node_list = list(set(res.stdout.strip().split()))
+        return node_list
