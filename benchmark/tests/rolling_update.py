@@ -32,7 +32,7 @@ def traffic_generator():
         status = 0
         error_msg = ""
         try:
-            resp = s.get(config.API_URL + "/assignments", timeout=1)
+            resp = s.get(config.API_URL + "/api/assignments", timeout=1)
             status = resp.status_code
         except Exception as e:
             status = -1
@@ -98,9 +98,7 @@ def test_rolling_update():
     # Pausa extra per avvio container
     time.sleep(5)
 
-    # --- FIX: ATTESA LIVELLO APPLICATIVO (HTTP) ---
-    # Non partiamo finché NGINX + Backend non si parlano
-    target_url = f"{config.API_URL}/assignments"
+    target_url = f"{config.API_URL}/api/assignments"
     if not wait_for_http_ready(target_url):
         print("[CRITICAL] Il cluster non risponde. Test abortito.")
         # Non resettiamo subito per permettere debug se serve
