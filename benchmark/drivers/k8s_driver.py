@@ -101,7 +101,7 @@ class K8sDriver:
         Returns a list of node names where the pods of the given service are currently running.
         Useful to identify a valid 'victim' node for fault tolerance tests.
         """
-        cmd = f"kubectl get pods -n {self.namespace} -l app={service_name}-o jsonpath='{{.items[*].spec.nodeName}}'"
+        cmd = f"kubectl get pods -n {self.namespace} -l app={service_name} -o jsonpath='{{.items[*].spec.nodeName}}'"
         res = self._run(cmd)
 
         if res.returncode != 0:
