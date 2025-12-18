@@ -24,7 +24,7 @@ def run_locust_test(replicas, duration=30, users=50, spawn_rate=10):
     os.makedirs(csv_dir, exist_ok=True)
     csv_prefix = os.path.join(csv_dir, f"locust_rep_{replicas}")
 
-    host_url = config.API_URL.replace("/api", "")  # Diventa http://192.168.15.9
+    host_url = config.API_URL
 
     # Comando Locust
     cmd = [

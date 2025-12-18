@@ -12,7 +12,8 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
 import config
-from drivers.swarm_driver import SwarmDriver
+#from drivers.swarm_driver import SwarmDriver
+from drivers.k8s_driver import K8sDriver
 
 # Configurazione
 STOP_TRAFFIC = False
@@ -21,7 +22,6 @@ POLLING_INTERVAL = 0.1
 
 
 def traffic_generator():
-    """Genera traffico costante per rilevare buchi di servizio"""
     global STOP_TRAFFIC, TRAFFIC_LOG
     print("[TRAFFIC] Generator started...")
 
@@ -64,11 +64,12 @@ def wait_for_http_ready(url, timeout=60):
 
 def test_rolling_update():
     global STOP_TRAFFIC
-    driver = SwarmDriver(config.STACK_NAME)
+    #driver = SwarmDriver(config.STACK_NAME)
+    driver = K8sDriver()
 
     output = {
-        "test_name": "rolling_update_zero_downtime",
-        "description": "Verifies service availability during a forced rolling update (start-first)",
+        "test_name": "rolling_update_zero_downtime_k8s",
+        "description": "Verifies service availability during a forced rolling update (rollout restart)",
         "replicas": 3,
         "results": {}
     }
@@ -77,26 +78,33 @@ def test_rolling_update():
 
     # 1. SETUP
     driver.reset_cluster()
-
     replicas = 3
-    driver.scale_service(config.SERVICE_NAME, replicas)
+    service_name = "backend"
+    driver.scale_service(service_name, replicas)
 
     print(f"[TEST] Waiting for infrastructure ({replicas} replicas)...")
 
-    # Attesa convergenza Docker
+    max_wait = 120
+    start_wait = time.time()
     while True:
-        curr, des = driver.get_replica_count(config.SERVICE_NAME)
-        if curr == replicas:
+        curr, des = driver.get_replica_count(service_name)
+        if curr == replicas and des == replicas:
             break
+        if time.time() - start_wait > max_wait:
+            print("[CRITICAL] Timeout waiting for replicas.")
+            return
         time.sleep(2)
+
+    # Pausa extra per avvio container
+    time.sleep(5)
 
     # --- FIX: ATTESA LIVELLO APPLICATIVO (HTTP) ---
     # Non partiamo finché NGINX + Backend non si parlano
-    if not wait_for_http_ready(config.API_URL + "/assignments"):
+    target_url = f"{config.API_URL}/assignments"
+    if not wait_for_http_ready(target_url):
         print("[CRITICAL] Il cluster non risponde. Test abortito.")
-        driver.reset_cluster()
+        # Non resettiamo subito per permettere debug se serve
         return
-    # ----------------------------------------------
 
     # 2. START TRAFFIC
     t = threading.Thread(target=traffic_generator)
@@ -106,18 +114,21 @@ def test_rolling_update():
     time.sleep(5)
 
     # 3. TRIGGER UPDATE
-    full_service_name = f"{config.STACK_NAME}_{config.SERVICE_NAME}"
-    # Aggiornamento lento (10s delay) per vedere bene il transitorio
-    update_cmd = f"docker service update --force --update-order start-first --update-delay 10s {full_service_name}"
-
-    print(f"[TEST] Triggering Rolling Update (Start-First)...")
+    print(f"[TEST] Triggering Rolling Update (Rollout Restart)...")
     update_start_time = time.time()
 
-    driver._run(update_cmd)
+    # CAMBIATO: Chiamata al metodo specifico del driver
+    driver.trigger_rolling_update(service_name)
 
     # 4. MONITOR UPDATE
-    # Attesa fissa abbondante per coprire tutto il rolling
+    # Attendiamo abbastanza tempo affinché K8s ruoti tutti i pod.
+    # K8s è veloce, ma diamogli tempo per vedere se ci sono errori di connessione nel mentre.
+    print("[TEST] Monitoring update process (45s)...")
     time.sleep(45)
+
+    update_end_time = time.time()
+    update_duration = update_end_time - update_start_time
+    print(f"[TEST] Update window finished. Stopping traffic...")
 
     update_end_time = time.time()
     update_duration = update_end_time - update_start_time
@@ -137,7 +148,7 @@ def test_rolling_update():
 
     success_rate = ((total_reqs - total_errors) / total_reqs) * 100 if total_reqs > 0 else 0
 
-    print(f"\n-> RISULTATI:")
+    print(f"\n-> RESULTS:")
     print(f"   Total Requests: {total_reqs}")
     print(f"   Failed Requests: {total_errors}")
     print(f"   Success Rate: {success_rate:.2f}%")

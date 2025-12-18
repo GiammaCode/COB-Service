@@ -86,3 +86,12 @@ class K8sDriver:
         time.sleep(5)  # K8s è veloce a terminare
 
         print("[K8S-DRIVER] Ready \n")
+
+    def trigger_rolling_update(self, service_name):
+       """Trigger rolling update,
+       K8s creates new pods and terminates olds,
+       policy: MaxSurge, maxUnavailable"""
+       print(f"[K8S-DRIVER] Triggering rollout restart for {service_name}...")
+       # rollout restart forza la ricreazione dei pod mantenendo il servizio attivo
+       cmd = f"kubectl rollout restart deployment/{service_name} -n {self.namespace}"
+       self._run(cmd)
