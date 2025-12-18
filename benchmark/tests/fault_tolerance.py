@@ -88,12 +88,16 @@ def test_fault_tolerance():
 
     # Identify a valid victim (a node that is actually running backend pods)
     active_nodes = driver.get_nodes_with_pods(service_name)
+    victim_candidates = [
+        node for node in active_nodes
+        if "mng" not in node.lower()
+    ]
 
-    if not active_nodes:
+    if not victim_candidates:
         print("[ERROR] No active nodes found for the service.")
         return
 
-    victim = active_nodes[0]
+    victim = victim_candidates[0]
     print(f"[TEST] Target Victim identified: {victim}")
     output["victim_node"] = victim
 
