@@ -4,11 +4,13 @@ metadata:
   name: cob-ingress
   namespace: cob-service
   annotations:
+    # Questo middleware toglie "/api" se presente.
     traefik.ingress.kubernetes.io/router.middlewares: cob-service-api-strip-prefix@kubernetescrd
 spec:
   rules:
     - http:
         paths:
+          # Regola 1: Backend (intercetta /api)
           - path: /api
             pathType: Prefix
             backend:
@@ -16,10 +18,11 @@ spec:
                 name: backend
                 port:
                   number: 5000
+          # Regola 2: Frontend
           - path: /
             pathType: Prefix
             backend:
               service:
                 name: frontend
                 port:
-                  number: 80
+                  number: 3000
