@@ -1,8 +1,6 @@
 import subprocess
 import time
-import json
-import sys
-import os
+import psutil
 
 class SwarmDriver:
     def __init__(self, stack_name="cob-service"):
@@ -140,4 +138,17 @@ class SwarmDriver:
         cmd = "docker service ps cob-service_db --filter desired-state=running --format '{{.Node}}'"
         res = self._run(cmd)
         return res.stdout.strip()
+
+    def get_dockerd_stats(self, process_name="dockerd"):
+        for proc in psutil.process_iter(['pid', 'name']):
+            if process_name in proc.info['name']:
+                try:
+                    p = psutil.Process(proc.info['pid'])
+                    return {
+                        "cpu": p.cpu_percent(interval=0.1),
+                        "ram_mb": p.memory_info().rss / (1024 * 1024)
+                    }
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        return None
 
