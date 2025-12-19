@@ -1,3 +1,9 @@
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Status](https://img.shields.io/badge/Status-Development-orange)
+![Docker](https://img.shields.io/badge/Orchestrator-Docker%20Swarm-2496ED)
+![K8s](https://img.shields.io/badge/Orchestrator-Kubernetes-326CE5)
+
 # COB-Service: Container Orchestrator Benchmark
 COB (Container Orchestrator Benchmark) is a thesis project designed to analyze, stress-test,
 and compare the performance of three major container orchestration technologies:
