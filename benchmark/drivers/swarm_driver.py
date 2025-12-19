@@ -25,7 +25,7 @@ class SwarmDriver:
         full_name = f"{self.stack_name}_{service_short_name}"
         res = self._run(f"docker service ls --filter name={full_name} --format ''{{{{.Replicas}}}}''")
         try:
-            # Se output è vuoto o malformato ritorna 0,0
+            # If output is empty or malformed return 0,0
             line = res.stdout.strip()
             if "/" in line:
                 current, desired = line.split("/")
@@ -45,8 +45,8 @@ class SwarmDriver:
 
     def get_cluster_stats(self):
         """
-        Ritorna la somma di CPU e RAM usata dai
-        container sul nodo corrente (Manager).
+        Returns the sum of CPU and RAM used by
+        containers on the current node (Manager).
         """
         cmd = "docker stats --no-stream --format '{{.CPUPerc}} {{.MemUsage}}'"
         res = self._run(cmd)
@@ -62,9 +62,9 @@ class SwarmDriver:
                 cpu_str = parts[0].replace('%', '')
                 total_cpu += float(cpu_str)
 
-                # MEM: "20.5MiB / 100MiB" -> prendiamo 20.5MiB
+                # MEM: "20.5MiB / 100MiB" -> take 20.5MiB
                 mem_str = parts[1]  # "20.5MiB"
-                # Rimuovi unità e converti
+                # Remove unit and convert
                 if "GiB" in mem_str:
                     val = float(mem_str.replace("GiB", "")) * 1024
                 elif "MiB" in mem_str:
@@ -83,9 +83,9 @@ class SwarmDriver:
         return {"cpu_percent": total_cpu, "memory_mb": total_mem_mb}
 
     def create_dummy_service(self, service_name, replicas):
-        """Crea un servizio leggero (Alpine) fuori dallo stack principale"""
+        """Creates a lightweight service (Alpine) outside the main stack"""
         print(f"[DRIVER] Creating dummy service {service_name} with {replicas} replicas...")
-        # Usiamo alpine con sleep infinity per avere overhead applicativo quasi nullo
+        # Use alpine with sleep infinity to have almost zero application overhead
         cmd = f"docker service create --name {service_name} --replicas {replicas} alpine:latest sleep infinity"
         self._run(cmd)
 
@@ -95,8 +95,8 @@ class SwarmDriver:
 
     def count_running_tasks(self, service_name):
         """
-        Conta quanti task sono EFFETTIVAMENTE in stato 'Running'.
-        Non si fida di 'docker service ls', guarda i singoli processi.
+        Counts how many tasks are ACTUALLY in 'Running' state.
+        Does not trust 'docker service ls', looks at single processes.
         """
         cmd = f"docker service ls --filter name={service_name} --format '{{{{.Replicas}}}}'"
         res = self._run(cmd)
@@ -120,8 +120,8 @@ class SwarmDriver:
         max_retries = 30
         for _ in range(max_retries):
             still_alive = False
-            # Controlliamo se ci sono task in running state per lo stack
-            # Questo comando lista tutti i processi dello stack che non sono Shutdown
+            # Check if there are tasks in running state for the stack
+            # This command lists all stack processes that are not Shutdown
             cmd = f"docker stack ps {self.stack_name} --filter desired-state=running --format '{{{{.ID}}}}'"
             res = self._run(cmd)
             if res.stdout.strip():
@@ -134,4 +134,3 @@ class SwarmDriver:
         print("[DRIVER] Cluster clean. Cooling down (5s)...")
         time.sleep(5)
         print("[DRIVER] Ready \n")
-

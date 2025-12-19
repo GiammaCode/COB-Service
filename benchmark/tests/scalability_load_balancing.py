@@ -16,21 +16,21 @@ from drivers.swarm_driver import SwarmDriver
 
 def run_locust_test(replicas, duration=30, users=50, spawn_rate=10):
     """
-    Esegue Locust in modalità headless e restituisce le statistiche.
-    Salva i CSV in results/csv_raw senza cancellarli.
+    Runs Locust in headless mode and returns statistics.
+    Saves CSVs in results/csv_raw without deleting them.
     """
     print(f"[TEST] Starting Load Test with Locust (Replicas: {replicas})...")
 
-    # 1. Configurazione percorsi CSV
-    # Cartella results/csv_raw nella root del benchmark
+    # 1. CSV paths configuration
+    # results/csv_raw folder in the benchmark root
     results_dir = os.path.join(parent_dir, "results")
     csv_dir = os.path.join(results_dir, "csv_raw")
     os.makedirs(csv_dir, exist_ok=True)
 
-    # Prefisso del file (es: results/csv_raw/locust_rep_1)
+    # File prefix (e.g., results/csv_raw/locust_rep_1)
     csv_prefix = os.path.join(csv_dir, f"locust_rep_{replicas}")
 
-    # Comando Locust
+    # Locust Command
     cmd = [
         "locust",
         "-f", os.path.join(parent_dir, "locustfile.py"),
@@ -42,16 +42,16 @@ def run_locust_test(replicas, duration=30, users=50, spawn_rate=10):
         "--csv", csv_prefix
     ]
 
-    # 2. Esecuzione Locust
-    # check=False è CRUCIALE: permette di continuare anche se Locust esce con errore (es. troppi 500)
+    # 2. Locust Execution
+    # check=False is CRITICAL: allows continuing even if Locust exits with error (e.g., too many 500s)
     try:
         subprocess.run(cmd, check=False, cwd=parent_dir, stdout=subprocess.DEVNULL)
     except Exception as e:
         print(f"[CRITICAL ERROR] Locust failed to start: {e}")
         return None
 
-    # 3. Lettura dei risultati dal CSV generato
-    # Locust aggiunge "_stats.csv" al prefisso che gli abbiamo passato
+    # 3. Reading results from generated CSV
+    # Locust adds "_stats.csv" to the prefix we passed
     stats_file = f"{csv_prefix}_stats.csv"
     result = {}
 
@@ -60,7 +60,7 @@ def run_locust_test(replicas, duration=30, users=50, spawn_rate=10):
             with open(stats_file, mode='r') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    # Prendiamo solo la riga "Aggregated" che contiene il riassunto
+                    # We take only the "Aggregated" row containing the summary
                     if row['Name'] == 'Aggregated':
                         result = {
                             "replicas": replicas,
@@ -75,7 +75,7 @@ def run_locust_test(replicas, duration=30, users=50, spawn_rate=10):
             print(f"[ERROR] Reading CSV: {e}")
             return None
 
-        # NOTA: Non cancelliamo più i file (os.remove rimosso)
+        # NOTE: We no longer delete files (os.remove removed)
         print(f"-> CSV saved to: {stats_file}")
     else:
         print(f"[ERROR] Stats file not found at: {stats_file}")
@@ -97,14 +97,14 @@ def test_scalability():
 
     print("--- Scalability & Load Balancing Stress Test (Locust) ---")
 
-    # Reset iniziale per pulizia
+    # Initial reset for cleanup
     driver.reset_cluster()
 
     for replicas in levels:
         # Scale
         driver.scale_service(config.SERVICE_NAME, replicas)
 
-        # Attesa convergenza
+        # Waiting for convergence
         print(f"[TEST] Waiting for {replicas} replicas to be ready...")
         time.sleep(5)
         max_wait = 60
@@ -119,20 +119,20 @@ def test_scalability():
                 break
             time.sleep(2)
 
-        # Tempo extra per stabilizzazione Flask
+        # Extra time for Flask stabilization
         time.sleep(5)
 
-        # Esecuzione Test
+        # Run Test
         data = run_locust_test(replicas, duration=20, users=500, spawn_rate=50)
 
-        # Aggiunta al report (anche se failures > 0)
+        # Add to report (even if failures > 0)
         if data:
             print(f"-> Result: {data['rps']} RPS | {data['avg_latency']}ms avg | Failures: {data['failures']}")
             output["results"].append(data)
         else:
             print(f"[ERROR] No data collected for {replicas} replicas")
 
-    # Salvataggio JSON finale
+    # Final JSON saving
     os.makedirs("results", exist_ok=True)
     outfile = "results/scalability_load_balancing.json"
     with open(outfile, "w") as f:

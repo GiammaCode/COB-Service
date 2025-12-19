@@ -31,7 +31,7 @@ def monitor_resources(duration_sec=10):
     cpus = []
     mems = []
 
-    # Cerca il processo una volta
+    # Search for the process once
     target_proc = None
     for proc in psutil.process_iter(['pid', 'name']):
         if "dockerd" in proc.info['name']:
@@ -42,11 +42,11 @@ def monitor_resources(duration_sec=10):
         print("[ERROR] Process 'dockerd' not found! Are you running as root/sudo?")
         return None
 
-    # Campionamento
+    # Sampling
     start = time.time()
     while time.time() - start < duration_sec:
         try:
-            # interval=None perché chiamiamo in loop con sleep
+            # interval=None because we call in a loop with sleep
             cpus.append(target_proc.cpu_percent(interval=None))
             mems.append(target_proc.memory_info().rss / (1024 * 1024))
             time.sleep(0.5)
@@ -62,9 +62,9 @@ def monitor_resources(duration_sec=10):
 def test_resource_overhead():
     driver = SwarmDriver(config.STACK_NAME)
 
-    # Livelli di carico (Container Reali Flask)
-    # Nota: 100 container Flask richiedono molta RAM.
-    # Se il test fallisce o il PC si blocca, riduci a [0, 10, 50]
+    # Load levels (Real Flask Containers)
+    # Note: 100 Flask containers require a lot of RAM.
+    # If the test fails or PC freezes, reduce to [0, 10, 50]
     levels = [0, 50, 100]
 
     output = {
@@ -91,14 +91,14 @@ def test_resource_overhead():
                 time.sleep(2)
 
             print(f"[TEST] {count} backend containers running.")
-            # Pausa più lunga per far stabilizzare i processi Python che partono
+            # Longer pause to let Python processes stabilize
             print("[TEST] Stabilizing (10s)...")
             time.sleep(10)
         else:
             print("[TEST] Baseline (0 containers). Stabilizing...")
             time.sleep(5)
 
-        # 3. MISURAZIONE
+        # 3. MONITORING
         print("[TEST] Monitoring 'dockerd' resources (10s)...")
         stats = monitor_resources()
 

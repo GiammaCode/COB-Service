@@ -15,10 +15,10 @@ from drivers.swarm_driver import SwarmDriver
 def test_scheduling():
     driver = SwarmDriver(config.STACK_NAME)
 
-    # Definiamo i livelli di carico per lo scheduler
-    # 10: Riscaldamento
-    # 50: Carico medio
-    # 100: Burst (se l'hardware lo permette, altrimenti riduci a 75)
+    # Define load levels for the scheduler
+    # 10: Warmup
+    # 50: Medium load
+    # 100: Burst (if hardware allows, otherwise reduce to 75)
     levels = [10, 50, 100]
 
     dummy_service = "benchmark_dummy"
@@ -36,27 +36,27 @@ def test_scheduling():
     for target in levels:
         print(f"\n[TEST] Testing burst of {target} containers...")
 
-        # 1. Creazione del servizio (Start Timer)
+        # 1. Service creation (Start Timer)
         start_time = time.time()
         driver.create_dummy_service(dummy_service, target)
 
-        # 2. Polling attivo per verificare lo stato 'Running'
-        # Non usiamo HTTP, controlliamo direttamente Docker
+        # 2. Active polling to verify 'Running' state
+        # We don't use HTTP, we check Docker directly
         while True:
             running = driver.count_running_tasks(dummy_service)
-            # print(f"\rNodes Active: {running}/{target}", end="") # Decommenta per vedere progresso live
+            # print(f"\rNodes Active: {running}/{target}", end="") # Uncomment to see live progress
 
             if running >= target:
                 end_time = time.time()
                 break
 
-            # Timeout di sicurezza (60s)
+            # Safety timeout (60s)
             if time.time() - start_time > 60:
                 print("\n[WARNING] Timeout reached!")
                 end_time = time.time()
                 break
 
-            # Polling frequente ma non troppo per non intasare la CPU del manager
+            # Frequent polling but not too much to avoid clogging manager CPU
             time.sleep(0.2)
 
         duration = end_time - start_time
@@ -70,13 +70,13 @@ def test_scheduling():
             "containers_per_second": round(target / duration, 2)
         })
 
-        # Cleanup immediato per il prossimo livello
+        # Immediate cleanup for the next level
         driver.remove_service(dummy_service)
-        # Pausa per far stabilizzare il cluster (cleanup dei network namespaces)
+        # Pause to let the cluster stabilize (network namespaces cleanup)
         print("[TEST] Cooling down (10s)...")
         time.sleep(10)
 
-    # Salvataggio
+    # Saving
     os.makedirs("results", exist_ok=True)
     outfile = "results/scheduling_overhead.json"
     with open(outfile, "w") as f:

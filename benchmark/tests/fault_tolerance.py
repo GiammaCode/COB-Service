@@ -12,18 +12,18 @@ sys.path.append(parent_dir)
 import config
 from drivers.swarm_driver import SwarmDriver
 
-TEST_DURATION = 60  # Durata totale monitoraggio post-kill
-POLLING_INTERVAL = 0.1 # Frequenza richieste (10 req/s per alta precisione)
+TEST_DURATION = 60  # Total monitoring duration post-kill
+POLLING_INTERVAL = 0.1 # Request frequency (10 req/s for high precision)
 
 stop_traffic = False
 traffic_log = []
 
 def traffic_generator():
-    """Genera traffico sequenziale e logga ogni singola richiesta"""
+    """Generates sequential traffic and logs every single request"""
     global stop_traffic
     print("[TRAFFIC] Generator started...")
 
-    # Sessione per performance, ma disabilitiamo keep-alive per testare il routing reale
+    # Session for performance, but disable keep-alive to test real routing
     s = requests.Session()
 
     while not stop_traffic:
@@ -31,7 +31,7 @@ def traffic_generator():
         status = 0
         error_msg = ""
         try:
-            # Timeout molto breve: se il nodo è morto, vogliamo fallire subito
+            # Very short timeout: if the node is dead, we want to fail immediately
             resp = s.get(config.API_URL + "/assignments", timeout=0.5)
             status = resp.status_code
         except Exception as e:
@@ -59,53 +59,53 @@ def test_fault_tolerance():
 
     print("--- Fault Tolerance Test (Hard Kill) ---")
 
-    # 1. SETUP
+    # SETUP
     driver.reset_cluster()
 
-    # Usiamo 6 repliche per essere sicuri di avere target sul nodo vittima
+    # Use 6 replicas to ensure we have targets on the victim node
     target_replicas = 6
     driver.scale_service(config.SERVICE_NAME, target_replicas)
 
     print(f"[TEST] Waiting for convergence ({target_replicas} replicas)...")
     time.sleep(15)
 
-    # Identifica vittima
+    # Identify victim
     workers = driver.get_worker_nodes()
     if not workers:
         print("[ERROR] No worker nodes found! Is the cluster running?")
         return
 
-    # Scegliamo il primo worker disponibile
+    # Choose the first available worker
     victim = workers[0]
     print(f"[TEST] Target Victim: {victim}")
     output["victim_node"] = victim
 
-    # 2. START TRAFFIC
+    # START TRAFFIC
     t = threading.Thread(target=traffic_generator)
     t.start()
 
-    # Lascia girare il traffico per un po' per avere una baseline
+    # Let traffic run for a while to establish a baseline
     print("[TEST] Baseline traffic (10s)...")
     time.sleep(10)
 
-    # 3. KILL
+    # KILL
     print(f"\n[TEST] EXECUTING HARD KILL ON {victim}...")
     kill_time = time.time()
     output["timeline_events"].append({"event": "kill_start", "time": kill_time})
 
-    input(f">>> AZIONE MANUALE: Spegni Docker su {victim} e premi INVIO <<<")
+    input(f">>> MANUAL ACTION: Shutdown Docker on {victim} and press ENTER <<<")
     print(f"[TEST] Node killed. Monitoring recovery for {TEST_DURATION}s...")
 
-    # 4. MONITOR RECOVERY
+    # MONITOR RECOVERY
     time.sleep(TEST_DURATION)
     stop_traffic = True
     t.join()
 
-    # 6. RESTORE NODE (Per pulizia futura)
+    # RESTORE NODE (For future cleanup)
     print(f"[TEST] Restoring node {victim} (cleanup)...")
 
-    # --- ANALISI DATI ---
-    # Convertiamo i log in CSV per debug
+    # --- DATA ANALYSIS ---
+    # Convert logs to CSV for debug
     csv_path = "results/fault_tolerance_log.csv"
     os.makedirs("results", exist_ok=True)
     with open(csv_path, "w", newline="") as f:
@@ -113,21 +113,21 @@ def test_fault_tolerance():
         writer.writeheader()
         writer.writerows(traffic_log)
 
-    # Calcolo RTO
-    # Cerchiamo il primo fallimento dopo il kill
+    # RTO Calculation
+    # Look for the first failure after kill
     failures_after_kill = [x for x in traffic_log if x['timestamp'] > kill_time and x['status'] != 200]
 
     if not failures_after_kill:
-        print("-> NO FAILURES DETECTED. Il sistema non ha risentito del kill (o il kill non ha funzionato).")
+        print("-> NO FAILURES DETECTED. The system was not affected by the kill (or the kill didn't work).")
         rto = 0
     else:
         first_fail_ts = failures_after_kill[0]['timestamp']
 
-        # Cerchiamo quando il sistema è tornato stabile (es. ultimi 10 successi consecutivi)
-        # Semplificazione: prendiamo l'ultimo timestamp di errore e calcoliamo la differenza dal primo
+        # Look for when the system became stable again (e.g. last 10 consecutive successes)
+        # Simplification: take the last error timestamp and calculate difference from the first
         last_fail_ts = failures_after_kill[-1]['timestamp']
 
-        # RTO grezzo: Tempo dall'inizio dei problemi alla fine dei problemi
+        # Raw RTO: Time from start of problems to end of problems
         rto = last_fail_ts - first_fail_ts
 
         total_errors = len(failures_after_kill)
@@ -137,12 +137,12 @@ def test_fault_tolerance():
         output["first_fail_ts"] = first_fail_ts
         output["last_fail_ts"] = last_fail_ts
 
-        print(f"\n-> RISULTATI:")
+        print(f"\n-> RESULTS:")
         print(f"   Failures detected: {total_errors}")
         print(f"   Estimated RTO: {rto:.2f} seconds")
-        print(f"   (Dettagli nel file CSV: {csv_path})")
+        print(f"   (Details in CSV file: {csv_path})")
 
-    # Salvataggio JSON
+    # Saving JSON
     outfile = "results/fault_tolerance.json"
     with open(outfile, "w") as f:
         json.dump(output, f, indent=2)
