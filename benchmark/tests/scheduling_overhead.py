@@ -8,75 +8,80 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
+# Local imports
 import config
-from drivers.swarm_driver import SwarmDriver
+from drivers.k8s_driver import K8sDriver
 
+DUMMY_SERVICE_NAME = "benchmark-dummy"
+LEVELS = [10, 50, 100]
+TIMEOUT_SECONDS = 120
 
 def test_scheduling():
-    driver = SwarmDriver(config.STACK_NAME)
-
-    # Definiamo i livelli di carico per lo scheduler
-    # 10: Riscaldamento
-    # 50: Carico medio
-    # 100: Burst (se l'hardware lo permette, altrimenti riduci a 75)
-    levels = [10, 50, 100]
-
-    dummy_service = "benchmark_dummy"
+    #driver = SwarmDriver(config.STACK_NAME)
+    driver = K8sDriver()
 
     output = {
-        "test_name": "scheduling_overhead_burst",
-        "description": "Time to schedule N lightweight containers (Alpine)",
+        "test_name": "scheduling_overhead_burst_k8s",
+        "description": "Time to schedule N lightweight containers (Alpine) on Kubernetes",
         "results": []
     }
 
     print("--- Scheduling Overhead Test (Burst) ---")
 
+    # Clean start
     driver.reset_cluster()
+    # Also ensure dummy service is gone from previous failed runs
+    driver.remove_service(DUMMY_SERVICE_NAME)
 
-    for target in levels:
+    for target in LEVELS:
         print(f"\n[TEST] Testing burst of {target} containers...")
 
-        # 1. Creazione del servizio (Start Timer)
+        # Create Deployment (Start Timer)
+        # K8s is async: the command returns immediately after creating the Deployment object.
+        # The scheduler starts working afterwards.
         start_time = time.time()
-        driver.create_dummy_service(dummy_service, target)
+        driver.create_dummy_service(DUMMY_SERVICE_NAME, target)
 
-        # 2. Polling attivo per verificare lo stato 'Running'
-        # Non usiamo HTTP, controlliamo direttamente Docker
+        # 2. Polling for 'Running'
         while True:
-            running = driver.count_running_tasks(dummy_service)
-            # print(f"\rNodes Active: {running}/{target}", end="") # Decommenta per vedere progresso live
+            running = driver.count_running_tasks(DUMMY_SERVICE_NAME)
+
+            sys.stdout.write(f"\r[POLLING] Active: {running}/{target}")
+            sys.stdout.flush()
 
             if running >= target:
                 end_time = time.time()
+                print("")
                 break
 
-            # Timeout di sicurezza (60s)
-            if time.time() - start_time > 60:
-                print("\n[WARNING] Timeout reached!")
+            # safety timeout
+            if time.time() - start_time > TIMEOUT_SECONDS:
+                print(f"\n[WARNING] Timeout reached! Only {running}/{target} started.")
                 end_time = time.time()
                 break
 
-            # Polling frequente ma non troppo per non intasare la CPU del manager
             time.sleep(0.2)
 
         duration = end_time - start_time
+        rate = target / duration if duration > 0 else 0
+
         print(f"\n-> Result: {target} containers in {duration:.3f}s")
-        print(f"-> Rate: {target / duration:.2f} containers/sec")
+        print(f"-> Rate: {rate:.2f} containers/sec")
 
         output["results"].append({
             "containers": target,
             "total_time_seconds": round(duration, 4),
             "avg_time_per_container": round(duration / target, 4),
-            "containers_per_second": round(target / duration, 2)
+            "containers_per_second": round(rate, 2)
         })
 
-        # Cleanup immediato per il prossimo livello
-        driver.remove_service(dummy_service)
-        # Pausa per far stabilizzare il cluster (cleanup dei network namespaces)
-        print("[TEST] Cooling down (10s)...")
-        time.sleep(10)
+        # Cleanup
+        driver.remove_service(DUMMY_SERVICE_NAME)
 
-    # Salvataggio
+        print("[TEST] Cooling down (15s)...")
+        time.sleep(15)
+
+    # Save res
     os.makedirs("results", exist_ok=True)
     outfile = "results/scheduling_overhead.json"
     with open(outfile, "w") as f:

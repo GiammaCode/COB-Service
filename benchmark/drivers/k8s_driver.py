@@ -136,3 +136,26 @@ class K8sDriver:
         """Deletes all pods associated with a service label to force restart"""
         print(f"[K8S-DRIVER] Deleting pods for {service_name}...")
         self._run(f"kubectl delete pod -n {self.namespace} -l app={service_name}")
+
+    def create_dummy_service(self, service_name, replicas):
+        """Creates a lightweight deployment for scheduling tests"""
+        print(f"[K8S-DRIVER] Creating dummy deployment {service_name}...")
+        # NOTA: --image=alpine:latest richiede che l'immagine sia scaricata.
+        # Se la rete è lenta, il primo test  falsato.
+        # K3s ha già le immagini base cachate di solito.
+        cmd = (f"kubectl create deployment {service_name} --image=alpine:latest --replicas={replicas} "
+               f"-n {self.namespace} -- sleep infinity")
+        self._run(cmd)
+
+    def remove_service(self, service_name):
+        print(f"[K8S-DRIVER] Removing deployment {service_name}...")
+        self._run(f"kubectl delete deployment {service_name} -n {self.namespace}")
+
+    def count_running_tasks(self, service_name):
+        # Conta solo i pod che sono effettivamente RUNNING
+        cmd = f"kubectl get pods -n {self.namespace} -l app={service_name} --field-selector=status.phase=Running --no-headers | wc -l"
+        res = self._run(cmd)
+        try:
+            return int(res.stdout.strip())
+        except:
+            return 0
