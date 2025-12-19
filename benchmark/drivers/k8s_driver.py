@@ -111,3 +111,28 @@ class K8sDriver:
         # .split() separates the names, set() removes duplicates, list() converts back to list
         node_list = list(set(res.stdout.strip().split()))
         return node_list
+
+    def get_pod_node(self, service_name):
+        """Returns the node name where the first pod of the service is running"""
+        cmd = (f"kubectl get pod "
+               f"-n {self.namespace} "
+               f"-l app={service_name} "
+               f"--field-selector=status.phase=Running "
+               f"-o jsonpath='{{.items[0].spec.nodeName}}'")
+        res = self._run(cmd)
+        return res.stdout.strip()
+
+    def cordon_node(self, node_name):
+        """Marks the node as unschedulable"""
+        print(f"[K8S-DRIVER] Cordoning node {node_name}...")
+        self._run(f"kubectl cordon {node_name}")
+
+    def uncordon_node(self, node_name):
+        """Marks the node as schedulable again"""
+        print(f"[K8S-DRIVER] Uncordoning node {node_name}...")
+        self._run(f"kubectl uncordon {node_name}")
+
+    def delete_pods_by_label(self, service_name):
+        """Deletes all pods associated with a service label to force restart"""
+        print(f"[K8S-DRIVER] Deleting pods for {service_name}...")
+        self._run(f"kubectl delete pod -n {self.namespace} -l app={service_name}")

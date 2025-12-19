@@ -135,3 +135,9 @@ class SwarmDriver:
         time.sleep(5)
         print("[DRIVER] Ready \n")
 
+    def get_db_node(self):
+        """Trova su quale nodo sta girando il DB"""
+        cmd = "docker service ps cob-service_db --filter desired-state=running --format '{{.Node}}'"
+        res = self._run(cmd)
+        return res.stdout.strip()
+
