@@ -5,8 +5,6 @@ import json
 import psutil
 import statistics
 
-from benchmark.drivers.swarm_driver import SwarmDriver
-
 # set up path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -78,7 +76,7 @@ def monitor_resources(duration_sec=10):
 
 def test_resource_overhead():
     #driver = SwarmDriver(config.STACK_NAME)
-    driver = K8sDriver
+    driver = K8sDriver()
 
     levels = [0, 50, 100]
 
