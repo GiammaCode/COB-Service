@@ -7,22 +7,29 @@ job "cob-service" {
     count = 1
 
     network {
-      mode = "bridge" # Ogni allocazione ha il suo IP isolato
+      mode = "bridge"
       port "mongo" { to = 27017 }
     }
 
-    # Definiamo il servizio per la discovery interna
+    # 1. AGGIUNGI QUESTO BLOCCO (Il ponte tra Host e Gruppo)
+    volume "mongodb-data" {      # Nome interno per il gruppo
+      type      = "host"
+      source    = "nfs-storage"  # <-- Questo deve coincidere con la config del Client (host_volume)
+      read_only = false
+    }
+
     service {
       name = "mongodb"
       port = "mongo"
-      provider = "nomad" # Nomad Native Service Discovery (disponibile da Nomad 1.3+)
+      provider = "nomad"
     }
 
     task "mongodb" {
       driver = "docker"
 
+      # 2. AGGIORNA IL MOUNT (Usa il nome interno definito sopra)
       volume_mount {
-        volume      = "nfs-storage" # Si riferisce all'host_volume nel client config
+        volume      = "mongodb-data" # <-- Qui usi "mongodb-data", NON "nfs-storage"
         destination = "/data/db"
         read_only   = false
       }
