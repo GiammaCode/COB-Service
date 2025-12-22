@@ -125,4 +125,94 @@ job "cob-service" {
       }
     }
   }
+
+  group "proxy-group" {
+    count = 1
+
+    network {
+      mode = "bridge"
+      port "http" {
+        static = 80
+      }
+    }
+
+    service {
+      name = "cob-lb"
+      port = "http"
+      provider = "nomad"
+    }
+
+    task "nginx" {
+      driver = "docker"
+
+      config {
+        image = "nginx:alpine"
+        ports = ["http"]
+        # Montiamo il file generato in sola lettura
+        volumes = [
+          "local/nginx.conf:/etc/nginx/nginx.conf"
+        ]
+      }
+
+      # Qui avviene la magia: trasformiamo il tuo file statico in dinamico
+      template {
+        change_mode   = "signal"
+        change_signal = "SIGHUP"
+        destination   = "local/nginx.conf"
+
+        data = <<EOF
+events {
+    worker_connections 1024;
+}
+
+http {
+    # --- ADATTAMENTO NOMAD: Upstream Dinamici ---
+
+    upstream frontend {
+        # Invece di "server frontend:3000", chiediamo a Nomad chi offre questo servizio
+        {{ range nomadService "cob-frontend" }}
+        server {{ .Address }}:{{ .Port }};
+        {{ else }}server 127.0.0.1:65535; # Fallback per non far crashare Nginx se vuoto
+        {{ end }}
+    }
+
+    upstream backend {
+        # Invece di "server backend:5000"
+        {{ range nomadService "cob-backend" }}
+        server {{ .Address }}:{{ .Port }};
+        {{ else }}server 127.0.0.1:65535;
+        {{ end }}
+    }
+
+    server {
+        listen 80;
+
+        # --- LA TUA CONFIGURAZIONE ORIGINALE (Invariata) ---
+
+        # 1. Rotta API
+        location /api/ {
+            proxy_pass http://backend/; # Nota: lo slash finale è importante, lo mantengo
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        # 2. Rotta Default (Frontend)
+        location / {
+            proxy_pass http://frontend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            # Supporto WebSocket
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+    }
+}
+EOF
+      }
+    }
+  }
 }
