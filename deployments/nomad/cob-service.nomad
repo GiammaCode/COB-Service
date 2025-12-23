@@ -118,6 +118,8 @@ job "cob-service" {
 
       env {
         REACT_APP_API_URL = "/api"
+        HOST = "0.0.0.0"
+        DANGEROUSLY_DISABLE_HOST_CHECK = "true"
       }
 
       resources {
