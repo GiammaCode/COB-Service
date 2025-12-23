@@ -48,11 +48,13 @@ job "cob-service" {
 
   # --- GRUPPO BACKEND ---
   group "backend-group" {
-    count = 2 # Scaliamo a 2 repliche
+    count = 2
 
     network {
       mode = "bridge"
-      port "http" { to = 5000 }
+      port "http" {
+        to = 5000
+      }
     }
 
     service {
@@ -65,13 +67,11 @@ job "cob-service" {
       driver = "docker"
 
       config {
-        # Sostituisci con la tua immagine buildata e pushata al registry locale
         image = "192.168.15.9:5000/cob-backend:latest"
         ports = ["http"]
       }
 
       env {
-        # Nomad service discovery magic: cerca il servizio "mongodb"
         MONGO_URI = "mongodb://{{ range nomadService \"mongodb\" }}{{ .Address }}:{{ .Port }}{{ end }}/cobdb"
       }
 
@@ -98,10 +98,7 @@ job "cob-service" {
     network {
       mode = "bridge"
       port "http" {
-        to = 80
-        # Espone la porta 80 del container su una porta statica dell'host?
-        # Meglio usare porta dinamica e un load balancer, ma per ora usiamo una porta statica per test
-        static = 8080
+        to = 3000
       }
     }
 
@@ -120,15 +117,12 @@ job "cob-service" {
       }
 
       env {
-        # Il frontend deve chiamare il backend.
-        # Nota: In un setup reale useresti un Ingress (es. Traefik o Nginx) davanti a tutto.
-        # Qui puntiamo direttamente a una delle istanze backend o usiamo un sidecar proxy.
-        REACT_APP_API_URL = "http://192.168.15.9:5000" # Esempio semplificato
+        REACT_APP_API_URL = "/api"
       }
 
       resources {
-        cpu    = 200
-        memory = 128
+        cpu    = 400
+        memory = 1024
       }
     }
   }
@@ -140,6 +134,7 @@ job "cob-service" {
       mode = "bridge"
       port "http" {
         static = 80
+        to = 80
       }
     }
 
@@ -155,7 +150,6 @@ job "cob-service" {
       config {
         image = "nginx:alpine"
         ports = ["http"]
-        # Montiamo il file generato in sola lettura
         volumes = [
           "local/nginx.conf:/etc/nginx/nginx.conf"
         ]
