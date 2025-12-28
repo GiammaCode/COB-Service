@@ -73,6 +73,7 @@ job "cob-service" {
 
       env {
         MONGO_URI = "mongodb://{{ range nomadService \"mongodb\" }}{{ .Address }}:{{ .Port }}{{ end }}/cobdb"
+        FLASK_RUN_HOST = "0.0.0.0"
       }
 
       # Necessario per renderizzare la stringa di connessione dinamica
