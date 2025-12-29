@@ -7,7 +7,7 @@ class NomadDriver:
         self.job_name = job_name
 
     def _run(self, cmd):
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+      return subprocess.run(cmd, shell=True, capture_output=True, text=True)
 
     def scale_service(self, service_name, replicas):
         group_map = {
