@@ -9,4 +9,7 @@ STACK_NAME = "cob-service"
 SERVICE_NAME = "backend"
 
 # Base API URL
-API_URL = "http://192.168.15.9/api"
+#API_URL = "http://192.168.15.9/api"
+
+# Nomad
+API_URL = "http://192.168.15.10/api"

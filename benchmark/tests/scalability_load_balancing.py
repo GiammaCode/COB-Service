@@ -13,7 +13,8 @@ sys.path.append(parent_dir)
 # --- Local Imports ---
 import config
 #from drivers.swarm_driver import SwarmDriver
-from drivers.k8s_driver import K8sDriver
+#from drivers.k8s_driver import K8sDriver
+from drivers.nomad_driver import NomadDriver
 
 # --- Constants ---
 LOCUST_USERS = 500
@@ -92,16 +93,18 @@ def test_scalability():
     Main Scalability Test Loop.
     Scales the backend to [1, 3, 5] replicas and runs a load test for each level.
     """
-    driver = K8sDriver()
+    #driver = SwarmDriver()
+    #driver = K8sDriver()
+    driver = NomadDriver()
     levels = [1, 3, 5]
 
     output = {
-        "test_name": "scalability_stress_test_k8s",
-        "description": "Stress test using Locust on Kubernetes to measure throughput vs replicas",
+        "test_name": "scalability_stress_test_nomad",
+        "description": "Stress test using Locust on Nomad to measure throughput vs replicas",
         "results": []
     }
 
-    print("--- Scalability & Load Balancing Stress Test (K8s) ---")
+    print("--- Scalability & Load Balancing Stress Test (Nomad) ---")
 
     # Reset cluster to a clean state
     driver.reset_cluster()
@@ -141,7 +144,7 @@ def test_scalability():
 
     # Save Results
     os.makedirs("results", exist_ok=True)
-    outfile = "results/scalability_load_balancing_k8s.json"
+    outfile = "results/scalability_load_balancing_nomad.json"
     with open(outfile, "w") as f:
         json.dump(output, f, indent=2)
 

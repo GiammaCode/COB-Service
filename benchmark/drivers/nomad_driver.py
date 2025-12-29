@@ -2,7 +2,7 @@ import subprocess
 import json
 import time
 
-class Nomad_driver:
+class NomadDriver:
     def __init__(self, job_name="cob-service"):
         self.job_name = job_name
 
