@@ -26,6 +26,7 @@ class NomadDriver:
             print(f"[ERROR] Failed to scale {target_group}: {res.stderr}")
 
     def get_replica_count(self, service_name):
+        """Ritorna (repliche_attive, repliche_desiderate)"""
         group_map = {
             "backend": "backend-group",
             "frontend": "frontend-group"
@@ -42,20 +43,35 @@ class NomadDriver:
         try:
             data = json.loads(res.stdout)
 
+            # --- FIX: Gestione caso in cui Nomad restituisca una lista ---
+            if isinstance(data, list):
+                if len(data) > 0:
+                    data = data[0]  # Prendiamo il primo job della lista
+                else:
+                    return 0, 0
+            # -----------------------------------------------------------
+
+            # 1. Trova il Desired Count
             desired = 0
-            task_groups = data.get("TaskGroups", [])
+            task_groups = data.get("TaskGroups") or []  # Usa 'or []' per sicurezza se è None
             for tg in task_groups:
                 if tg["Name"] == target_group:
                     desired = tg["Count"]
                     break
 
-            summary = data.get("Summary", {}).get(target_group, {})
-            current = summary.get("Running", 0)
+            # 2. Trova il Running Count
+            # Nota: Summary potrebbe essere None nel JSON, usiamo 'or {}'
+            summary_block = data.get("Summary") or {}
+            group_summary = summary_block.get(target_group) or {}
+
+            current = group_summary.get("Running", 0)
 
             return int(current), int(desired)
 
         except Exception as e:
-            print(f"[ERROR] JSON parsing error: {e}")
+            # Stampa l'errore ma anche l'inizio del JSON per capire cosa arriva
+            print(f"[ERROR] Parsing error: {e}")
+            # print(f"DEBUG JSON (primi 100 char): {res.stdout[:100]}")
             return 0, 0
 
     def reset_cluster(self):
