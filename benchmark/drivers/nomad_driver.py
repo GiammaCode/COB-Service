@@ -42,32 +42,38 @@ class NomadDriver:
         try:
             data = json.loads(res.stdout)
 
-            # --- INIZIO MODIFICA: Gestione caso Lista ---
-            # Se Nomad restituisce una lista, prendiamo il primo elemento
+            # Gestione caso lista (la fix che abbiamo fatto prima)
             if isinstance(data, list):
                 if len(data) > 0:
                     data = data[0]
                 else:
-                    # Lista vuota, nessun job trovato
                     return 0, 0
-            # --- FINE MODIFICA ---
 
             desired = 0
-            # Ora 'data' è sicuramente un dizionario, quindi .get() funzionerà
             task_groups = data.get("TaskGroups", [])
             for tg in task_groups:
                 if tg["Name"] == target_group:
                     desired = tg["Count"]
                     break
 
-            summary = data.get("Summary", {}).get(target_group, {})
+            # --- DEBUG PRINTS (AGGIUNGI QUESTO) ---
+            summary_section = data.get("Summary", {})
+            print(f"[DEBUG] Looking for group: '{target_group}' in keys: {list(summary_section.keys())}")
+            # --------------------------------------
+
+            summary = summary_section.get(target_group, {})
             current = summary.get("Running", 0)
+
+            # --- DEBUG PRINTS (AGGIUNGI QUESTO) ---
+            print(f"[DEBUG] Service: {service_name} | Target: {target_group} | Current: {current} | Desired: {desired}")
+            # --------------------------------------
 
             return int(current), int(desired)
 
         except Exception as e:
             print(f"[ERROR] JSON parsing error: {e}")
             return 0, 0
+
 
     def reset_cluster(self):
         print("\n[NOMAD-DRIVER] --- RESETTING CLUSTER ---")
