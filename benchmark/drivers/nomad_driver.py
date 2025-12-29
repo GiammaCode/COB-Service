@@ -42,7 +42,7 @@ class NomadDriver:
         try:
             data = json.loads(res.stdout)
 
-            # Gestione caso lista (la fix che abbiamo fatto prima)
+            # Gestione caso lista (fix precedente)
             if isinstance(data, list):
                 if len(data) > 0:
                     data = data[0]
@@ -56,17 +56,20 @@ class NomadDriver:
                     desired = tg["Count"]
                     break
 
-            # --- DEBUG PRINTS (AGGIUNGI QUESTO) ---
-            summary_section = data.get("Summary", {})
-            print(f"[DEBUG] Looking for group: '{target_group}' in keys: {list(summary_section.keys())}")
-            # --------------------------------------
+            # --- FIX NESTING SUMMARY ---
+            # Nomad struttura: Job -> Summary -> Summary -> GroupName
+            job_summary = data.get("Summary", {})
 
-            summary = summary_section.get(target_group, {})
-            current = summary.get("Running", 0)
+            # Verifica se c'è un ulteriore livello 'Summary' (comune nelle versioni recenti)
+            if "Summary" in job_summary and isinstance(job_summary["Summary"], dict):
+                group_map_data = job_summary["Summary"]
+            else:
+                group_map_data = job_summary
 
-            # --- DEBUG PRINTS (AGGIUNGI QUESTO) ---
-            print(f"[DEBUG] Service: {service_name} | Target: {target_group} | Current: {current} | Desired: {desired}")
-            # --------------------------------------
+            # Estrai i dati del gruppo target
+            final_summary = group_map_data.get(target_group, {})
+            current = final_summary.get("Running", 0)
+            # ---------------------------
 
             return int(current), int(desired)
 
