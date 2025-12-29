@@ -21,24 +21,53 @@ class K8sDriver:
             print(f"[ERROR] Failed to scale {service_name}: {res.stderr}]")
 
     def get_replica_count(self, service_name):
-        """Get the number of replicas for a service"""
-        cmd = f"kubectl get deployment {service_name} -n {self.namespace} -o json"
+        """Ritorna (repliche_attive, repliche_desiderate)"""
+        group_map = {
+            "backend": "backend-group",
+            "frontend": "frontend-group"
+        }
+        target_group = group_map.get(service_name, f"{service_name}-group")
+
+        cmd = f"nomad job status -json {self.job_name}"
         res = self._run(cmd)
 
         if res.returncode != 0:
-            return 0,0
+            print(f"[ERROR] Nomad status failed: {res.stderr}")
+            return 0, 0
 
         try:
             data = json.loads(res.stdout)
-            # Spec.replicas è il desired
-            desired = data.get("spec", {}).get("replicas", 0)
-            # Status.readyReplicas sono quelle attive (se manca è 0)
-            current = data.get("status", {}).get("readyReplicas", 0)
-            if current is None: current = 0  # Fix per K8s quando scala a 0
+
+            # --- FIX: Gestione caso in cui Nomad restituisca una lista ---
+            if isinstance(data, list):
+                if len(data) > 0:
+                    data = data[0]  # Prendiamo il primo job della lista
+                else:
+                    return 0, 0
+            # -----------------------------------------------------------
+
+            # 1. Trova il Desired Count
+            desired = 0
+            task_groups = data.get("TaskGroups") or []  # Usa 'or []' per sicurezza se è None
+            for tg in task_groups:
+                if tg["Name"] == target_group:
+                    desired = tg["Count"]
+                    break
+
+            # 2. Trova il Running Count
+            # Nota: Summary potrebbe essere None nel JSON, usiamo 'or {}'
+            summary_block = data.get("Summary") or {}
+            group_summary = summary_block.get(target_group) or {}
+
+            current = group_summary.get("Running", 0)
 
             return int(current), int(desired)
+
         except Exception as e:
-            print(f"[ERROR] Error parsing JSON: {e}")
+            # Stampa l'errore ma anche l'inizio del JSON per capire cosa arriva
+            print(f"[ERROR] Parsing error: {e}")
+            # print(f"DEBUG JSON (primi 100 char): {res.stdout[:100]}")
+            return 0, 0
 
     def get_worker_nodes(self):
         """Return nodes list"""
