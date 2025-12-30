@@ -50,6 +50,23 @@ job "cob-service" {
   group "backend-group" {
     count = 2
 
+    update {
+      # Aggiorna 1 container alla volta (fondamentale per non andare offline)
+      max_parallel      = 1
+      # Aspetta che il nuovo task sia "sano" prima di procedere
+      health_check      = "checks"
+      # Una volta che il task risponde, aspetta altri 10 secondi per sicurezza
+      # prima di spegnere la vecchia replica.
+      min_healthy_time  = "10s"
+      # Tempo massimo per considerare l'aggiornamento fallito
+      healthy_deadline  = "5m"
+      progress_deadline = "10m"
+      # Se l'aggiornamento fallisce, torna automaticamente alla versione precedente
+      auto_revert       = true
+      # Canary a 0 significa "fai l'update diretto", senza fase di test manuale
+      canary            = 0
+    }
+
     network {
       mode = "bridge"
       port "http" {
