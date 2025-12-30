@@ -103,6 +103,71 @@ class NomadDriver:
         else:
             print(f"[NOMAD-DRIVER] Rolling update triggered successfully.")
 
+    def wait_for_deployment_completion(self, timeout=120):
+        """
+        Attende che l'ultimo deployment di Nomad sia completato (status 'successful').
+        Restituisce il tempo esatto impiegato (in secondi).
+        """
+        print(f"[NOMAD-DRIVER] Waiting for deployment completion (timeout={timeout}s)...")
+        start_time = time.time()
+
+        # 1. Troviamo l'ID dell'ultimo deployment
+        # Diamo un secondo a Nomad per registrare il deployment dopo il restart
+        time.sleep(2)
+
+        cmd_list = f"nomad deployment list -json -job {self.job_name}"
+        res = self._run(cmd_list)
+
+        if res.returncode != 0:
+            print(f"[ERROR] Could not list deployments: {res.stderr}")
+            return 0
+
+        try:
+            deployments = json.loads(res.stdout)
+            if not deployments:
+                print("[WARNING] No deployments found.")
+                return 0
+
+            # Ordiniamo per data decrescente (il primo è il più recente) e prendiamo l'ID
+            # (Nomad di solito li restituisce già ordinati, ma per sicurezza...)
+            latest_deployment = deployments[0]
+            deploy_id = latest_deployment['ID']
+            print(f"[NOMAD-DRIVER] Tracking Deployment ID: {deploy_id}")
+
+        except Exception as e:
+            print(f"[ERROR] JSON parsing error (list): {e}")
+            return 0
+
+        # 2. Loop di monitoraggio
+        while time.time() - start_time < timeout:
+            cmd_status = f"nomad deployment status -json {deploy_id}"
+            res_status = self._run(cmd_status)
+
+            if res_status.returncode == 0:
+                try:
+                    data = json.loads(res_status.stdout)
+                    status = data.get("Status")
+
+                    # Stati possibili: running, successful, failed, cancelled
+                    if status == "successful":
+                        elapsed = time.time() - start_time
+                        print(f"[NOMAD-DRIVER] Deployment SUCCESSFUL in {elapsed:.2f}s")
+                        return elapsed
+
+                    elif status in ["failed", "cancelled"]:
+                        print(f"[ERROR] Deployment {status}!")
+                        return time.time() - start_time  # Ritorniamo comunque il tempo perso
+
+                    # Se è 'running', continuiamo ad aspettare
+
+                except Exception as e:
+                    print(f"[DEBUG] Error parsing deployment status: {e}")
+
+            time.sleep(1)  # Polling ogni secondo
+
+        print(f"[ERROR] Timeout waiting for deployment {deploy_id}")
+        return timeout
+
     def reset_cluster(self):
         print("\n[NOMAD-DRIVER] --- RESETTING CLUSTER ---")
         self.scale_service("backend", 2)

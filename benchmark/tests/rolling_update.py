@@ -137,25 +137,41 @@ def test_rolling_update():
 
     driver.trigger_rolling_update(service_name)
 
-    # 4. MONITOR UPDATE PROCESS
-    print(f"[TEST] Monitoring update process for {UPDATE_WINDOW}s...")
-    time.sleep(UPDATE_WINDOW)
+    print(f"[TEST] Triggering Rolling Update (Nomad Job Restart)...")
 
-    update_end_time = time.time()
-    update_duration = update_end_time - update_start_time
-    print(f"[TEST] Update window finished. Stopping traffic...")
+    # Nota: Non prendiamo il tempo qui, lo calcolerà il driver internamente
+    # o possiamo prenderlo per il riferimento globale, ma ci fidiamo del driver per la durata.
+    trigger_time = time.time()
+    driver.trigger_rolling_update(service_name)
 
-    # 5. STOP & ANALYZE
+    # 5. MONITOR UPDATE PROCESS (DINAMICO)
+    # Invece di dormire fisso, aspettiamo che Nomad ci dia l'ok
+    print(f"[TEST] Monitoring deployment status...")
+
+    # Questa funzione blocca l'esecuzione finché l'update non finisce (o va in timeout)
+    # e restituisce i secondi esatti impiegati.
+    real_duration = driver.wait_for_deployment_completion(timeout=120)
+
+    update_end_time = time.time()  # Tempo assoluto di fine
+
+    # Se per caso il driver ritorna 0 (errore), usiamo un fallback
+    if real_duration == 0:
+        real_duration = update_end_time - trigger_time
+
+    print(f"[TEST] Update finished. Real duration: {real_duration:.2f}s. Stopping traffic...")
+
+    # 6. STOP & ANALYZE
     STOP_TRAFFIC = True
     t.join()
 
-    # Calculate Stats
+    # Calcolo Statistiche
     total_reqs = len(TRAFFIC_LOG)
     errors = [x for x in TRAFFIC_LOG if x['status'] != 200]
     total_errors = len(errors)
 
-    # Filter errors that happened strictly during the update window
-    update_errors = [x for x in errors if x['timestamp'] >= update_start_time and x['timestamp'] <= update_end_time]
+    # Filtriamo errori avvenuti SOLO durante la finestra reale di aggiornamento
+    # Usiamo i tempi assoluti (trigger_time -> update_end_time) per filtrare i log
+    update_errors = [x for x in errors if x['timestamp'] >= trigger_time and x['timestamp'] <= update_end_time]
 
     success_rate = ((total_reqs - total_errors) / total_reqs) * 100 if total_reqs > 0 else 0
 
@@ -165,7 +181,7 @@ def test_rolling_update():
     print(f"   Success Rate: {success_rate:.2f}%")
 
     output["results"] = {
-        "duration_seconds": round(update_duration, 2),
+        "duration_seconds": round(real_duration, 2),
         "total_requests": total_reqs,
         "failed_requests": total_errors,
         "success_rate_percent": round(success_rate, 2),
