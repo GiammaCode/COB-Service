@@ -14,7 +14,8 @@ sys.path.append(parent_dir)
 # --- Local Imports ---
 import config
 #from drivers.swarm_driver import SwarmDriver
-from drivers.k8s_driver import K8sDriver
+#from drivers.k8s_driver import K8sDriver
+from drivers.nomad_driver import NomadDriver
 
 # --- Constants & Globals ---
 STOP_TRAFFIC = False
@@ -82,10 +83,11 @@ def test_rolling_update():
     Scales service, starts traffic, triggers K8s rollout, and analyzes downtime.
     """
     global STOP_TRAFFIC
-    driver = K8sDriver()
+    #driver = K8sDriver()
+    driver = NomadDriver()
 
     output = {
-        "test_name": "rolling_update_zero_downtime_k8s",
+        "test_name": "rolling_update_zero_downtime_nomad",
         "description": "Verifies service availability during a forced rolling update (rollout restart)",
         "replicas": REPLICAS,
         "results": {}
@@ -171,7 +173,7 @@ def test_rolling_update():
     }
 
     # Save CSV Log
-    csv_path = "results/rolling_update_log_k8s.csv"
+    csv_path = "results/rolling_update_log_nomad.csv"
     os.makedirs("results", exist_ok=True)
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["timestamp", "status", "error"])
@@ -179,7 +181,7 @@ def test_rolling_update():
         writer.writerows(TRAFFIC_LOG)
 
     # Save JSON Results
-    outfile = "results/rolling_update_k8s.json"
+    outfile = "results/rolling_update_nomad.json"
     with open(outfile, "w") as f:
         json.dump(output, f, indent=2)
 

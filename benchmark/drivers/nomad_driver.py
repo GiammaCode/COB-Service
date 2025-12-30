@@ -91,6 +91,17 @@ class NomadDriver:
             print(f"[ERROR] JSON parsing error: {e}")
             return 0, 0
 
+    def trigger_rolling_update(self, service_name=None):
+        print(f"[NOMAD-DRIVER] Triggering Rolling Restart for job '{self.job_name}'...")
+
+        # Il comando 'nomad job restart' forza un rolling update dei task
+        cmd = f"nomad job restart {self.job_name}"
+        res = self._run(cmd)
+
+        if res.returncode != 0:
+            print(f"[ERROR] Failed to trigger rolling update: {res.stderr}")
+        else:
+            print(f"[NOMAD-DRIVER] Rolling update triggered successfully.")
 
     def reset_cluster(self):
         print("\n[NOMAD-DRIVER] --- RESETTING CLUSTER ---")
