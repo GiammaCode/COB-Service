@@ -7,4 +7,4 @@ class APIUser(HttpUser):
 
     @task
     def get_assignments(self):
-        self.client.get("/api/assignments")
+        self.client.get("/api/assignments", headers={"Connection": "close"})
