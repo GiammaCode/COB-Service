@@ -160,8 +160,7 @@ job "cob-service" {
 
       # Qui avviene la magia: trasformiamo il tuo file statico in dinamico
       template {
-        change_mode   = "signal"
-        change_signal = "SIGHUP"
+        change_mode   = "restart"
         destination   = "local/nginx.conf"
 
         data = <<EOF
