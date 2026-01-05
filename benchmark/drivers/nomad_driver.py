@@ -168,6 +168,44 @@ class NomadDriver:
         print(f"[ERROR] Timeout waiting for deployment {deploy_id}")
         return timeout
 
+    def get_active_nodes(self, service_name):
+        # Mappa per trovare il nome del gruppo corretto
+        group_map = {
+            "backend": "backend-group",
+            "frontend": "frontend-group",
+            "database": "db-group"
+        }
+        target_group = group_map.get(service_name, f"{service_name}-group")
+
+        cmd = f"nomad job status -json {self.job_name}"
+        res = self._run(cmd)
+
+        if res.returncode != 0:
+            print(f"[ERROR] Could not get job status: {res.stderr}")
+            return []
+
+        active_nodes = set()
+        try:
+            data = json.loads(res.stdout)
+
+            # Se è una lista (fix per versioni vecchie/strane CLI), prendi il primo
+            if isinstance(data, list):
+                data = data[0] if len(data) > 0 else {}
+
+            allocations = data.get("Allocations", [])
+
+            for alloc in allocations:
+                # Controlliamo che appartenga al gruppo giusto e sia attivo
+                if alloc["TaskGroup"] == target_group and alloc["ClientStatus"] == "running":
+                    node_name = alloc.get("NodeName", "unknown")
+                    active_nodes.add(node_name)
+
+        except Exception as e:
+            print(f"[ERROR] JSON parsing error in get_active_nodes: {e}")
+            return []
+
+        return list(active_nodes)
+
     def reset_cluster(self):
         print("\n[NOMAD-DRIVER] --- RESETTING CLUSTER ---")
         self.scale_service("backend", 2)

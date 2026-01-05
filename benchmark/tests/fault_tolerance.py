@@ -6,6 +6,8 @@ import os
 import json
 import csv
 
+from benchmark.drivers.nomad_driver import NomadDriver
+
 # --- Setup Paths ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -15,6 +17,7 @@ sys.path.append(parent_dir)
 import config
 #from drivers.swarm_driver import SwarmDriver
 from drivers.k8s_driver import K8sDriver
+from drivers.nomad_driver import NomadDriver
 
 # --- Constants ---
 TEST_DURATION = 90      # Duration of monitoring after the kill (seconds)
@@ -61,7 +64,8 @@ def traffic_generator():
 
 def test_fault_tolerance():
     global stop_traffic
-    driver = K8sDriver()
+    #driver = K8sDriver()
+    dirver = NomadDriver()
 
     output = {
         "test_name": "fault_tolerance_hard_kill_k8s",
@@ -87,7 +91,7 @@ def test_fault_tolerance():
     time.sleep(10)  # Simple wait for K8s
 
     # Identify a valid victim (a node that is actually running backend pods)
-    active_nodes = driver.get_nodes_with_pods(service_name)
+    active_nodes = driver.get_active_nodes(service_name)
     victim_candidates = [
         node for node in active_nodes
         if "mng" not in node.lower()
@@ -177,7 +181,7 @@ def test_fault_tolerance():
         print(f"   (See {csv_path} for details)")
 
     # Save JSON
-    outfile = "results/fault_tolerance_k8s.json"
+    outfile = "results/fault_tolerance_nomad.json"
     with open(outfile, "w") as f:
         json.dump(output, f, indent=2)
 
