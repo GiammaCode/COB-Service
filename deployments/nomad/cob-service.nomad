@@ -50,6 +50,14 @@ job "cob-service" {
   group "backend-group" {
     count = 2
 
+    #Altrimenti nomad non riavvia i container
+    reschedule {
+      delay          = "5s"       # Aspetta solo 5s prima di tentare il riavvio
+      delay_function = "constant" # Non aumentare il tempo a ogni tentativo (esponenziale)
+      unlimited      = true       # Riprova all'infinito finché non trovi un nodo
+      interval       = "1m"
+    }
+
     update {
       # Aggiorna 1 container alla volta (fondamentale per non andare offline)
       max_parallel      = 1

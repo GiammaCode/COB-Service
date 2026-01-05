@@ -66,7 +66,7 @@ def test_fault_tolerance():
     driver = NomadDriver()
 
     output = {
-        "test_name": "fault_tolerance_hard_kill_k8s",
+        "test_name": "fault_tolerance_hard_kill_nomad",
         "description": "Measures RTO (Recovery Time Objective) after a node hard power-off",
         "victim_node": None,
         "rto_seconds": 0,
