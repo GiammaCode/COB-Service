@@ -63,7 +63,7 @@ def traffic_generator():
 def test_fault_tolerance():
     global stop_traffic
     #driver = K8sDriver()
-    dirver = NomadDriver()
+    driver = NomadDriver()
 
     output = {
         "test_name": "fault_tolerance_hard_kill_k8s",
