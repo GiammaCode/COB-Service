@@ -6,6 +6,13 @@ job "cob-service" {
   group "db-group" {
     count = 1
 
+    reschedule {
+      delay          = "5s"
+      delay_function = "constant"
+      unlimited      = true
+      interval       = "1m"
+    }
+
     network {
       mode = "bridge"
       port "mongo" { to = 27017 }
@@ -121,6 +128,13 @@ job "cob-service" {
   group "frontend-group" {
     count = 2
 
+    reschedule {
+      delay          = "5s"
+      delay_function = "constant"
+      unlimited      = true
+      interval       = "1m"
+    }
+
     network {
       mode = "bridge"
       port "http" {
@@ -157,6 +171,13 @@ job "cob-service" {
 
   group "proxy-group" {
     count = 1
+
+    reschedule {
+      delay          = "5s"
+      delay_function = "constant"
+      unlimited      = true
+      interval       = "1m"
+    }
 
     network {
       mode = "bridge"
