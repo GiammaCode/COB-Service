@@ -139,7 +139,7 @@ def test_fault_tolerance():
     print(f"\n[IMPORTANT] Test finished. Remember to START node {victim} again in Proxmox!")
 
     # save raw data
-    csv_path = "results/fault_tolerance_log_k8s.csv"
+    csv_path = "results/fault_tolerance_log_nomad.csv"
     os.makedirs("results", exist_ok=True)
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["timestamp", "status", "error"])
