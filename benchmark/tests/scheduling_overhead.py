@@ -10,39 +10,51 @@ sys.path.append(parent_dir)
 
 # Local imports
 import config
-from drivers.k8s_driver import K8sDriver
+# from drivers.k8s_driver import K8sDriver
+from drivers.nomad_driver import NomadDriver  # <--- USIAMO NOMAD
 
 DUMMY_SERVICE_NAME = "benchmark-dummy"
+# Livelli di carico: 10, 50, 100 container
+# Nomad è molto veloce, potremmo osare anche di più, ma restiamo coerenti col test K8s
 LEVELS = [10, 50, 100]
 TIMEOUT_SECONDS = 120
 
+
 def test_scheduling():
-    #driver = SwarmDriver(config.STACK_NAME)
-    driver = K8sDriver()
+    driver = NomadDriver()
 
     output = {
-        "test_name": "scheduling_overhead_burst_k8s",
-        "description": "Time to schedule N lightweight containers (Alpine) on Kubernetes",
+        "test_name": "scheduling_overhead_burst_nomad",
+        "description": "Time to schedule N lightweight containers (Alpine) on Nomad",
         "results": []
     }
 
-    print("--- Scheduling Overhead Test (Burst) ---")
+    print("--- Scheduling Overhead Test (Burst - Nomad) ---")
 
     # Clean start
-    driver.reset_cluster()
-    # Also ensure dummy service is gone from previous failed runs
     driver.remove_service(DUMMY_SERVICE_NAME)
+
+    # --- WARMUP ---
+    # Nomad è velocissimo a schedulare, ma se deve scaricare l'immagine docker (pull)
+    # il test viene falsato dalla rete. Facciamo un giro a vuoto.
+    print("[TEST] Warming up (Pulling Alpine image on nodes)...")
+    driver.create_dummy_service(DUMMY_SERVICE_NAME, 3)  # 3 repliche (una per nodo)
+    time.sleep(5)
+    driver.remove_service(DUMMY_SERVICE_NAME)
+    time.sleep(2)
+    # --------------
 
     for target in LEVELS:
         print(f"\n[TEST] Testing burst of {target} containers...")
 
-        # Create Deployment (Start Timer)
-        # K8s is async: the command returns immediately after creating the Deployment object.
-        # The scheduler starts working afterwards.
+        # Start Timer
         start_time = time.time()
+
+        # Inviamo il Job al cluster
         driver.create_dummy_service(DUMMY_SERVICE_NAME, target)
 
-        # 2. Polling for 'Running'
+        # Polling for 'Running'
+        # Nomad aggiorna lo stato molto velocemente
         while True:
             running = driver.count_running_tasks(DUMMY_SERVICE_NAME)
 
@@ -54,13 +66,13 @@ def test_scheduling():
                 print("")
                 break
 
-            # safety timeout
+            # Timeout sicurezza
             if time.time() - start_time > TIMEOUT_SECONDS:
                 print(f"\n[WARNING] Timeout reached! Only {running}/{target} started.")
                 end_time = time.time()
                 break
 
-            time.sleep(0.2)
+            time.sleep(0.1)  # Polling veloce per Nomad
 
         duration = end_time - start_time
         rate = target / duration if duration > 0 else 0
@@ -75,15 +87,15 @@ def test_scheduling():
             "containers_per_second": round(rate, 2)
         })
 
-        # Cleanup
+        # Cleanup immediato per il prossimo giro
         driver.remove_service(DUMMY_SERVICE_NAME)
 
-        print("[TEST] Cooling down (15s)...")
-        time.sleep(15)
+        print("[TEST] Cooling down (5s)...")
+        time.sleep(5)
 
     # Save res
     os.makedirs("results", exist_ok=True)
-    outfile = "results/scheduling_overhead.json"
+    outfile = "results/scheduling_overhead_nomad.json"
     with open(outfile, "w") as f:
         json.dump(output, f, indent=2)
     print(f"\n[TEST] Completed. JSON saved to {outfile}")
