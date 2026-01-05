@@ -2,6 +2,10 @@ job "cob-service" {
   datacenters = ["dc1"]
   type        = "service"
 
+  spread {
+    attribute = "${node.unique.id}"
+  }
+
   # --- GRUPPO DATABASE ---
   group "db-group" {
     count = 1
