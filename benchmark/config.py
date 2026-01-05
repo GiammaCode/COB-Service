@@ -12,4 +12,4 @@ SERVICE_NAME = "backend"
 #API_URL = "http://192.168.15.9/api"
 
 # Nomad
-API_URL = "http://192.168.15.10/api"
+API_URL = "http://192.168.15.9/api"

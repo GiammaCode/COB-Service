@@ -2,10 +2,6 @@ job "cob-service" {
   datacenters = ["dc1"]
   type        = "service"
 
-  spread {
-    attribute = "${node.unique.id}"
-  }
-
   # --- GRUPPO DATABASE ---
   group "db-group" {
     count = 1
@@ -25,7 +21,7 @@ job "cob-service" {
     # 1. AGGIUNGI QUESTO BLOCCO (Il ponte tra Host e Gruppo)
     volume "mongodb-data" {      # Nome interno per il gruppo
       type      = "host"
-      source    = "nfs-storage"  # <-- Questo deve coincidere con la config del Client (host_volume)
+      source    = "nfs-storage"
       read_only = false
     }
 
@@ -174,7 +170,7 @@ job "cob-service" {
   }
 
   group "proxy-group" {
-    count = 1
+    count = 3
 
     reschedule {
       delay          = "5s"
