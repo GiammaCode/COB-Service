@@ -19,11 +19,11 @@ The goal is to evaluate these platforms under identical workloads using a custom
 This repository uses Git Tags to manage the specific configuration and benchmark suite for each orchestrator. 
 To reproduce the results for a specific technology, please check out the corresponding tag.
 
-| Orchestrator     | Git Tag      | Status     | Description                                    |
-|:-----------------|:-------------|:-----------|:-----------------------------------------------|
-| **Docker Swarm** | `v1.0-swarm` | Completed  | Full benchmark suite optimized for Swarm Mode. |
-| **Kubernetes**   | `v2.0-k8s`   | Completed  | Benchmark adaptation for K8s clusters.         |
-| **Nomad**        | `v3.0-nomad` | Planned    | Planned support for HashiCorp Nomad.           |
+| Orchestrator     | Git Tag      | Status     | 
+|:-----------------|:-------------|:-----------|
+| **Docker Swarm** | `v1.0-swarm` | Completed  | 
+| **Kubernetes**   | `v2.0-k8s`   | Completed  | 
+| **Nomad**        | `v3.0-nomad` | Completed  | 
 
 ### How to Switch Versions
 To switch the codebase to the specific orchestrator version you want to test:
