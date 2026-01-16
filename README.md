@@ -3,6 +3,7 @@
 ![Status](https://img.shields.io/badge/Status-Development-orange)
 ![Docker](https://img.shields.io/badge/Orchestrator-Docker%20Swarm-2496ED)
 ![K8s](https://img.shields.io/badge/Orchestrator-Kubernetes-326CE5)
+![Nomad](https://img.shields.io/badge/Orchestrator-Nomad-00CA8E)
 
 # COB-Service: Container Orchestrator Benchmark
 COB (Container Orchestrator Benchmark) is a thesis project designed to analyze, stress-test,
